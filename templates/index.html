@@ -121,6 +121,15 @@
                 // The user has a recovery token in the URL fragment.
                 // Redirect them to the dedicated update password page.
                 window.location.href = '/update-password';
+            } else if (event === 'SIGNED_IN') {
+                // This handles the case where a user verifies their email and is redirected
+                // here with a session in the URL fragment. We want to force them to log in manually.
+                const urlParams = new URLSearchParams(window.location.hash.substring(1));
+                if (urlParams.get('type') === 'signup') {
+                    // This was a signup verification. Log them out and send to login page.
+                    supabase.auth.signOut();
+                    window.location.href = '/login?verified=true';
+                }
             }
         });
     </script>

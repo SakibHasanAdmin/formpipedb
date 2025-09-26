@@ -12,8 +12,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style> body { font-family: 'Inter', sans-serif; } </style>
 </head>
-<body class="bg-white">
-    <div class="flex flex-col md:flex-row min-h-screen">
+<body class="bg-gray-100">
+    <!-- Loader -->
+    <div id="loader" class="fixed inset-0 flex items-center justify-center bg-gray-100 z-50">
+        <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content" class="flex flex-col md:flex-row min-h-screen bg-white opacity-0 transition-opacity duration-300">
         <!-- Left Column: Branding -->
         <div class="hidden md:flex md:w-1/2 bg-gray-50 items-center justify-center p-12">
             <div class="max-w-md text-center">
@@ -64,11 +73,6 @@
         const hcaptchaSiteKey = '{{ hcaptcha_site_key }}';
         const errorMessage = document.getElementById('error-message');
         const successMessage = document.getElementById('success-message');
-        // --- FIX: Get loader and content elements ---
-        const loader = document.getElementById('loader');
-        const mainContent = document.getElementById('main-content');
-
-
         // --- Add a variable to hold the hCaptcha widget ID for resetting ---
         let hcaptchaWidgetId = null;
 
@@ -105,9 +109,12 @@
             });
         }
 
-        // --- FIX: Check for an existing session on page load ---
+        // --- Check for an existing session on page load ---
         // If a user is already logged in, redirect them to the app dashboard.
         // This now also handles showing the content if the user is NOT logged in.
+        const loader = document.getElementById('loader');
+        const mainContent = document.getElementById('main-content');
+
         supabase.auth.onAuthStateChange((event, session) => {
             // This event fires once on page load.
             if (event === 'INITIAL_SESSION') {
@@ -115,6 +122,11 @@
                     // User is logged in, redirect immediately. The loader is still visible.
                     window.location.href = '/app';
                 } else {
+                    // Check if redirected from email verification
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('verified') === 'true') {
+                        successMessage.textContent = 'Email verified successfully! Please log in.';
+                    }
                     // User is not logged in. Hide loader and show the login form.
                     loader.style.display = 'none';
                     mainContent.style.opacity = 1;
@@ -125,7 +137,8 @@
         const loginForm = document.getElementById('login-form');
         loginForm.addEventListener('submit', async (event) => {
             event.preventDefault();
-            errorMessage.textContent = ''; // Clear previous errors
+            errorMessage.textContent = ''; 
+            successMessage.textContent = '';
 
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
