@@ -38,7 +38,16 @@
                     <input type="text" id="full_name" placeholder="Full Name" required class="w-full px-4 py-3 text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
                     <input type="email" id="email" placeholder="Email address" required class="w-full px-4 py-3 text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
                     <input type="email" id="confirm_email" placeholder="Confirm Email" required class="w-full px-4 py-3 text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
-                    <input type="password" id="password" placeholder="Password" required class="w-full px-4 py-3 text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+                    <div>
+                        <input type="password" id="password" placeholder="Password" required class="w-full px-4 py-3 text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+                        <!-- Password Strength Indicator -->
+                        <div id="password-strength-container" class="mt-2 space-y-1 hidden">
+                            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                <div id="password-strength-bar" class="h-2.5 rounded-full transition-all" style="width: 0%;"></div>
+                            </div>
+                            <p id="password-strength-text" class="text-xs font-medium"></p>
+                        </div>
+                    </div>
                     <input type="password" id="confirm_password" placeholder="Confirm Password" required class="w-full px-4 py-3 text-gray-700 bg-gray-100 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
                     
                     <div id="hcaptcha-container" class="flex justify-center pt-2">
@@ -91,6 +100,55 @@
  
         const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
  
+        // --- Password Strength Validation ---
+        const passwordInput = document.getElementById('password');
+        const strengthContainer = document.getElementById('password-strength-container');
+        const strengthBar = document.getElementById('password-strength-bar');
+        const strengthText = document.getElementById('password-strength-text');
+
+        passwordInput.addEventListener('input', () => {
+            const password = passwordInput.value;
+            if (password.length === 0) {
+                strengthContainer.classList.add('hidden');
+                return;
+            }
+            strengthContainer.classList.remove('hidden');
+            
+            let score = 0;
+            if (password.length >= 8) score++;
+            if (/[a-z]/.test(password)) score++;
+            if (/[A-Z]/.test(password)) score++;
+            if (/[0-9]/.test(password)) score++;
+            if (/[^a-zA-Z0-9]/.test(password)) score++;
+
+            let label = '';
+            let color = 'bg-gray-400';
+            let width = '0%';
+
+            switch (score) {
+                case 0:
+                case 1:
+                    label = 'Weak'; color = 'bg-red-500'; width = '20%';
+                    break;
+                case 2:
+                    label = 'Medium'; color = 'bg-yellow-500'; width = '40%';
+                    break;
+                case 3:
+                    label = 'Good'; color = 'bg-blue-500'; width = '60%';
+                    break;
+                case 4:
+                    label = 'Strong'; color = 'bg-green-500'; width = '80%';
+                    break;
+                case 5:
+                    label = 'Very Strong'; color = 'bg-green-600'; width = '100%';
+                    break;
+            }
+            strengthText.textContent = `Strength: ${label}`;
+            strengthText.className = `text-xs font-medium ${color.replace('bg-', 'text-')}`;
+            strengthBar.className = `h-2.5 rounded-full transition-all ${color}`;
+            strengthBar.style.width = width;
+        });
+
         const signupForm = document.getElementById('signup-form');
         signupForm.addEventListener('submit', async (event) => {
             event.preventDefault();
@@ -124,6 +182,13 @@
                 if (hcaptchaWidgetId !== null) hcaptcha.reset(hcaptchaWidgetId);
                 return;
             }
+
+            // --- FIX: Add check for minimum password length before submission ---
+            if (password.length < 8) {
+                errorMessage.textContent = 'Password must be at least 8 characters long.';
+                if (hcaptchaWidgetId !== null) hcaptcha.reset(hcaptchaWidgetId);
+                return;
+            }
  
             if (!termsAgreed) {
                 errorMessage.textContent = 'You must agree to the Terms and Conditions and Privacy Policy.';
@@ -146,7 +211,12 @@
             });
 
             if (error) {
-                errorMessage.textContent = error.message;
+                // --- FIX: Provide a user-friendly message if the account already exists ---
+                if (error.message.includes("User already registered")) {
+                    errorMessage.innerHTML = 'An account with this email already exists. Please <a href="/login" class="font-medium text-blue-600 hover:text-blue-500">log in</a> instead.';
+                } else {
+                    errorMessage.textContent = error.message;
+                }
                 // --- FIX: Reset the CAPTCHA on any submission error ---
                 if (hcaptchaWidgetId !== null) hcaptcha.reset(hcaptchaWidgetId);
             } else if (data.user && data.session) {
