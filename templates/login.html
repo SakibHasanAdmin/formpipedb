@@ -53,6 +53,7 @@
                     <button type="submit" class="w-full py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all">Log In</button>
                 </form>
                 <p id="error-message" class="text-center text-sm text-red-600 mt-4"></p>
+                <p id="success-message" class="text-center text-sm text-green-600 mt-4"></p>
             </div>
         </div>
     </div>
@@ -62,6 +63,11 @@
         const supabaseAnonKey = '{{ supabase_anon_key }}';
         const hcaptchaSiteKey = '{{ hcaptcha_site_key }}';
         const errorMessage = document.getElementById('error-message');
+        const successMessage = document.getElementById('success-message');
+        // --- FIX: Get loader and content elements ---
+        const loader = document.getElementById('loader');
+        const mainContent = document.getElementById('main-content');
+
 
         // --- Add a variable to hold the hCaptcha widget ID for resetting ---
         let hcaptchaWidgetId = null;
@@ -101,14 +107,28 @@
 
         // --- FIX: Check for an existing session on page load ---
         // If a user is already logged in, redirect them to the app dashboard.
+        // This now also handles showing the content if the user is NOT logged in.
         supabase.auth.onAuthStateChange((event, session) => {
-            // The 'INITIAL_SESSION' event fires on page load if a valid session is found.
-            if (event === 'INITIAL_SESSION' && session) {
-                // Redirect immediately to the main application page.
-                window.location.href = '/app';
+            // This event fires once on page load.
+            if (event === 'INITIAL_SESSION') {
+                if (session) {
+                    // User is logged in, redirect immediately. The loader is still visible.
+                    window.location.href = '/app';
+                } else {
+                    // User is not logged in. Hide loader and show the login form.
+                    loader.style.display = 'none';
+                    mainContent.style.opacity = 1;
+                }
             }
         });
 
+        // --- FIX: Show a success message after email verification ---
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('message') === 'verification_success') {
+            successMessage.textContent = 'Email verified successfully! Please log in to continue.';
+            // Clean the URL
+            window.history.replaceState({}, document.title, "/login");
+        }
         const loginForm = document.getElementById('login-form');
         loginForm.addEventListener('submit', async (event) => {
             event.preventDefault();

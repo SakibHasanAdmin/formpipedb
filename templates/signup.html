@@ -204,9 +204,9 @@
                     data: {
                         full_name: fullName
                     },
-                    // --- FIX: Explicitly tell Supabase where to send the user after they click the verification link. ---
-                    // This ensures they land on the correct page.
-                    emailRedirectTo: `${window.location.origin}/email-verified`
+                    // --- FIX: Redirect directly to the login page after email verification for a smoother UX. ---
+                    // The login page is already set up to show a success message.
+                    emailRedirectTo: `${window.location.origin}/login?message=verification_success`
                 }
             });
 
