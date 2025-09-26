@@ -204,8 +204,8 @@
                     data: {
                         full_name: fullName
                     },
-                    // Explicitly tell Supabase where to send the user after they click the verification link.
-                    // This will redirect them to your /email-verified page.
+                    // --- FIX: Explicitly tell Supabase where to send the user after they click the verification link. ---
+                    // This ensures they land on the correct page.
                     emailRedirectTo: `${window.location.origin}/email-verified`
                 }
             });
@@ -221,7 +221,6 @@
                 if (hcaptchaWidgetId !== null) hcaptcha.reset(hcaptchaWidgetId);
             } else if (data.user && data.session) {
                 // User is signed in, likely because email confirmation is disabled.
-                localStorage.setItem('supabase_token', data.session.access_token);
                 window.location.href = '/app';
             } else if (data.user && !data.session) {
                 // User signed up but needs to confirm their email.

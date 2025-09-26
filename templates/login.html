@@ -87,14 +87,14 @@
             };
         }
 
-        // --- FIX: Initialize Supabase client without specifying storage initially ---
+        // Initialize a temporary Supabase client for the initial session check.
         // We will create a new client instance during login to set the correct storage.
         const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
 
-        // --- Helper function to create a client with specific storage ---
+        // Helper function to create a client with specific storage
         function createSupabaseClient(rememberMe) {
             const storage = rememberMe ? window.localStorage : window.sessionStorage;
-            return window.supabase.createClient(supabaseUrl, supabaseAnonKey, {
+            return window.supabase.createClient(supabaseUrl, supabaseAnonKey, { // This creates a new instance
                 auth: { storage: storage },
             });
         }
@@ -102,9 +102,9 @@
         // --- FIX: Check for an existing session on page load ---
         // If a user is already logged in, redirect them to the app dashboard.
         supabase.auth.onAuthStateChange((event, session) => {
-            // The 'INITIAL_SESSION' event fires on page load if a session is found.
+            // The 'INITIAL_SESSION' event fires on page load if a valid session is found.
             if (event === 'INITIAL_SESSION' && session) {
-                // Redirect to the main application page.
+                // Redirect immediately to the main application page.
                 window.location.href = '/app';
             }
         });
@@ -127,7 +127,7 @@
                 return;
             }
 
-            // --- FIX: Use a client with the correct storage based on "Remember me" ---
+            // --- FIX: Create and use a client with the correct storage based on "Remember me" ---
             const supabaseClientForLogin = createSupabaseClient(rememberMe);
 
             const { data, error } = await supabaseClientForLogin.auth.signInWithPassword({
@@ -143,9 +143,7 @@
                 // --- Reset the CAPTCHA on any submission error ---
                 if (hcaptchaWidgetId !== null) hcaptcha.reset(hcaptchaWidgetId);
             } else {
-                // --- FIX: No need to manually set localStorage token ---
-                // The Supabase client now manages the session in the correct storage
-                // (localStorage for 'remember me', sessionStorage otherwise).
+                // The Supabase client now manages the session in the correct storage.
                 // The onAuthStateChange listener on other pages will pick it up automatically.
                 window.location.href = '/app';
             }

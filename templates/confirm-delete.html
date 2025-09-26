@@ -120,8 +120,8 @@
                     });
 
                     if (response.ok) {
-                        // On success, sign out completely and redirect.
-                        await supabase.auth.signOut();
+                        // --- FIX: On success, sign out completely and redirect. ---
+                        await supabase.auth.signOut(); // This clears the local session/token
                         window.location.href = "/delete-success";
                     } else {
                         const errorData = await response.json();
