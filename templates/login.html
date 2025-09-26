@@ -38,6 +38,13 @@
                             <a href="/forgot-password" class="text-sm font-medium text-blue-600 hover:text-blue-500">Forgot password?</a>
                         </div>
                     </div>
+                    <!-- --- FIX: Add "Remember me" checkbox --- -->
+                    <div class="flex items-center justify-between">
+                        <label for="remember-me" class="flex items-center text-sm text-gray-600">
+                            <input type="checkbox" id="remember-me" name="remember-me" checked class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <span class="ml-2">Remember me</span>
+                        </label>
+                    </div>
                     <div class="flex justify-center pt-2">
                         <div id="hcaptcha-container">
                             <!-- The h-captcha div will be inserted here by JavaScript -->
@@ -80,7 +87,27 @@
             };
         }
 
+        // --- FIX: Initialize Supabase client without specifying storage initially ---
+        // We will create a new client instance during login to set the correct storage.
         const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+        // --- Helper function to create a client with specific storage ---
+        function createSupabaseClient(rememberMe) {
+            const storage = rememberMe ? window.localStorage : window.sessionStorage;
+            return window.supabase.createClient(supabaseUrl, supabaseAnonKey, {
+                auth: { storage: storage },
+            });
+        }
+
+        // --- FIX: Check for an existing session on page load ---
+        // If a user is already logged in, redirect them to the app dashboard.
+        supabase.auth.onAuthStateChange((event, session) => {
+            // The 'INITIAL_SESSION' event fires on page load if a session is found.
+            if (event === 'INITIAL_SESSION' && session) {
+                // Redirect to the main application page.
+                window.location.href = '/app';
+            }
+        });
 
         const loginForm = document.getElementById('login-form');
         loginForm.addEventListener('submit', async (event) => {
@@ -89,6 +116,7 @@
 
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
+            const rememberMe = document.getElementById('remember-me').checked;
 
             // Get the hCaptcha response token from the form
             const formData = new FormData(loginForm);
@@ -99,7 +127,10 @@
                 return;
             }
 
-            const { data, error } = await supabase.auth.signInWithPassword({
+            // --- FIX: Use a client with the correct storage based on "Remember me" ---
+            const supabaseClientForLogin = createSupabaseClient(rememberMe);
+
+            const { data, error } = await supabaseClientForLogin.auth.signInWithPassword({
                 email: email,
                 password: password,
                 options: {
@@ -112,8 +143,10 @@
                 // --- Reset the CAPTCHA on any submission error ---
                 if (hcaptchaWidgetId !== null) hcaptcha.reset(hcaptchaWidgetId);
             } else {
-                // Store the token for other pages to use
-                localStorage.setItem('supabase_token', data.session.access_token);
+                // --- FIX: No need to manually set localStorage token ---
+                // The Supabase client now manages the session in the correct storage
+                // (localStorage for 'remember me', sessionStorage otherwise).
+                // The onAuthStateChange listener on other pages will pick it up automatically.
                 window.location.href = '/app';
             }
         });
