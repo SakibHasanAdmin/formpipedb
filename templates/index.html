@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="index, follow">
+    <meta name="description" content="FormPipeDB is a simple, no-code platform for creating and managing SQLite databases. Easily import, query, and export your data through an intuitive web interface. Perfect for developers and small businesses.">
+    <title>FormPipeDB | Simple No-Code SQLite Database Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;550;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" href="../static/images/favicon.ico">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .gradient-bg {
+            background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
+        }
+    </style>
+</head>
+<body class="bg-white text-gray-800 flex flex-col min-h-screen">
+
+    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-sm border-b border-gray-200">
+        <nav class="container mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
+            <div class="flex-shrink-0">
+                <a href="/" class="text-3xl font-bold text-black">FormPipeDB</a>
+            </div>
+            <div class="hidden md:flex items-center space-x-6 lg:space-x-8">
+                <a href="/about" class="text-lg font-medium text-gray-600 hover:text-blue-600 transition-colors">About Us</a>
+                <a href="/contact" class="text-lg font-medium text-gray-600 hover:text-blue-600 transition-colors">Contact</a>
+            </div>
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <a href="/login" class="text-base sm:text-lg font-medium text-gray-600 hover:text-blue-600 transition-colors px-3 py-2">Login</a>
+                <a href="/signup" class="bg-blue-600 text-white px-4 sm:px-5 py-2 rounded-lg text-base sm:text-lg font-medium hover:bg-blue-700 transition-all">Sign Up</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="flex-grow">
+        <section class="relative gradient-bg">
+            <div class="container mx-auto px-6 py-16 md:py-24 flex flex-col-reverse md:flex-row items-center justify-center min-h-[70vh] md:min-h-[80vh]">
+                <div class="md:w-1/2 text-center md:text-left mt-12 md:mt-0 pr-0 md:pr-8">
+                    <h1 class="text-4xl md:text-6xl font-extrabold leading-tight text-gray-900">Your Data, Simplified.</h1>
+                    <p class="text-xl md:text-2xl text-gray-600 mt-4">FormPipeDB is the simple, honest tool for your data. Create and manage clean SQL databases, import your information from various sources, and visualize it all without the complexity.</p>
+                    <div class="mt-8">
+                        <a href="/signup" class="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-transform hover:scale-105">Get Started for Free</a>
+                    </div>
+                </div>
+                <div class="md:w-1/2 flex justify-center items-center">
+                    <img src="../static/images/hero-image.png" alt="A diagram showing data flowing into a central database" class="w-full h-auto max-w-lg rounded-lg">
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-white py-20">
+            <div class="container mx-auto px-6 text-center">
+                <h2 class="text-3xl md:text-4xl font-bold mb-4">A More Efficient Way to Handle Data</h2>
+                <p class="text-lg text-gray-600 mb-12 max-w-2xl mx-auto">Focus on your business, not on complex database configurations or manual data entry.</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+                    <div class="bg-gray-50 p-8 rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                        <div class="flex items-center justify-center h-16 w-16 bg-blue-100 text-blue-600 rounded-full mx-auto mb-6">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7a8 8 0 0116 0" /></svg>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-3">No-Code Database Management</h3>
+                        <p class="text-gray-600">Create and manage your databases through an intuitive interface. No SQL knowledge required.</p>
+                    </div>
+                    <div class="bg-gray-50 p-8 rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                        <div class="flex items-center justify-center h-16 w-16 bg-green-100 text-green-600 rounded-full mx-auto mb-6">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-3">Flexible Data Import</h3>
+                        <p class="text-gray-600">Import your data from CSV files or existing SQL scripts with just a few clicks. Get your information into a structured database quickly.</p>
+                    </div>
+                    <div class="bg-gray-50 p-8 rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                        <div class="flex items-center justify-center h-16 w-16 bg-purple-100 text-purple-600 rounded-full mx-auto mb-6">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-3">Built for Efficiency</h3>
+                        <p class="text-gray-600">Save time and reduce manual data entry. Our platform is designed to make your processes faster and more reliable.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-gray-900 text-white">
+        <div class="container mx-auto px-6 py-8">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-6 md:mb-0">
+                    <a href="/" class="text-2xl font-bold hover:text-gray-300">FormPipeDB</a>
+                    <p class="text-gray-400 mt-2">© 2025 FormPipeDB. All rights reserved.</p>
+                </div>
+                <div class="flex space-x-8">
+                    <a href="/about" class="text-md hover:text-gray-300">About</a>
+                    <a href="/contact" class="text-md hover:text-gray-300">Contact</a>
+                    <a href="/terms" class="text-md hover:text-gray-300">Terms</a>
+                    <a href="/privacy" class="text-md hover:text-gray-300">Privacy</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // These values are injected by your FastAPI/Jinja2 backend from main.py
+        const SUPABASE_URL = "{{ supabase_url }}";
+        const SUPABASE_ANON_KEY = "{{ supabase_anon_key }}";
+
+        // Initialize the Supabase client
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Listen for authentication state changes
+        supabase.auth.onAuthStateChange((event, session) => {
+            // When a user clicks the password recovery link from their email,
+            // they land on this page and this event is triggered.
+            if (event === 'PASSWORD_RECOVERY') {
+                // Redirect them to the dedicated update password page.
+                window.location.href = '/update-password';
+            }
+        });
+    </script>
+</body>
+</html>

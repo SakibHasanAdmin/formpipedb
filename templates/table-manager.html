@@ -1,0 +1,1754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Manager - FormPipeDB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Fira+Code&display=swap" rel="stylesheet">
+
+    <!-- Highlight.js for static code views -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <style> 
+        body { font-family: 'Inter', sans-serif; } .CodeMirror { font-family: 'Fira Code', monospace; border-radius: 0.375rem; height: 10rem; }
+        .modal { transition: opacity 0.3s ease-in-out; }
+        #sidebar, #main-content { transition: all 0.3s ease-in-out; }
+        .sidebar-item-title, .sidebar-header-text, #sidebar-footer-text { transition: opacity 0.2s, width 0.2s; }
+        #sidebar.collapsed .sidebar-item-title, #sidebar.collapsed .sidebar-header-text, #sidebar.collapsed #sidebar-footer-text {
+            opacity: 0;
+            width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+<div class="h-screen flex">
+    <!-- Collapsible Sidebar -->
+    <aside id="sidebar" class="w-72 bg-white border-r flex flex-col shrink-0">
+        <div class="p-4 border-b overflow-hidden">
+            <div class="sidebar-header-text">
+                <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
+            </div>
+            <div class="sidebar-header-text mt-2">
+                <h1 class="text-2xl font-bold text-gray-800 mt-1 truncate" title="{{ db_name }}">{{ db_name }}</h1>
+            </div>
+        </div>
+        <div class="p-4 border-b">
+            <h2 class="sidebar-header-text text-lg font-semibold text-gray-700">Tables</h2>
+        </div>
+        <nav id="table-list" class="flex-1 p-4 space-y-1 overflow-y-auto">
+            <!-- Loading state -->
+            <div class="flex items-center gap-2 text-sm text-gray-500 p-2">
+                <svg class="animate-spin h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <span class="sidebar-item-title">Loading tables...</span>
+            </div>
+        </nav>
+        <div class="p-4 border-t space-y-2 overflow-hidden">
+            <button id="create-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg><span class="sidebar-item-title">New Table</span></button>
+            <button id="view-db-sql-sidebar-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v5c0 2.21 3.582 4 8 4s8-1.79 8-4V7"></path></svg><span class="sidebar-item-title">View DB SQL</span></button>
+            <button id="delete-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg><span class="sidebar-item-title">Delete Table</span></button>
+        </div>
+        <div class="p-2 border-t">
+            <button id="toggle-sidebar-btn" class="w-full flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800">
+                <svg id="collapse-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                <svg id="expand-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+        </div>
+    </aside>
+
+    <main id="main-content" class="flex-1 p-4 md:p-8 overflow-auto hidden">
+        <div id="table-tabs-container" class="border-b mb-6 overflow-x-auto">
+            <nav class="flex space-x-6 whitespace-nowrap">
+                <button data-tab="data" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-blue-500 text-blue-600">Data</button>
+                <button data-tab="structure" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">Structure</button>
+                <button data-tab="table-sql" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">SQL</button>
+            </nav>
+        </div>
+
+        <div id="structure-tab-content" class="table-tab-content hidden">
+            <div class="bg-white rounded-lg shadow-sm border overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="p-3 text-left font-semibold">Column Name</th>
+                                <th class="p-3 text-left font-semibold">Data Type</th>
+                                <th class="p-3 text-center font-semibold">Not Null</th>
+                                <th class="p-3 text-center font-semibold">Primary Key</th>
+                                <th class="p-3 text-center font-semibold">Unique</th>
+                                <th class="p-3 text-left font-semibold">Foreign Key</th>
+                                <th class="p-3 text-center font-semibold">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="structure-tbody" class="divide-y">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="table-sql-tab-content" class="table-tab-content hidden">
+            <h3 class="text-lg font-semibold mb-2">Table SQL Schema</h3>
+            <div class="p-4 rounded-md font-mono text-sm ring-1 ring-gray-200 relative bg-[#282c34]">
+                <button id="copy-table-sql-btn" class="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-semibold py-1 px-2 rounded">Copy</button>
+                <pre><code id="table-sql-code"></code></pre>
+            </div>
+            <div class="mt-2 text-right">
+                <button id="view-db-sql-btn" class="text-sm text-blue-600 hover:underline font-semibold">View Full Database SQL</button>
+            </div>
+        </div>
+
+        <div id="data-tab-content" class="table-tab-content">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                <div class="w-full md:w-1/3">
+                    <input type="search" id="row-search-input" placeholder="Search rows..." class="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <button id="add-row-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold">Add Row</button>
+                    <button id="import-rows-btn" class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 flex-grow">Import Rows</button>
+                    <button id="export-csv-btn" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 ml-2">Export to CSV</button>
+                </div>
+            </div>
+            <div id="data-table-wrapper" class="bg-white rounded-lg shadow-sm border overflow-auto max-h-[70vh] relative">
+                <div id="data-table-loader" class="hidden absolute inset-0 bg-white bg-opacity-75 z-10 flex items-center justify-center">
+                    <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+                <table class="min-w-full text-sm">
+                    <thead id="data-table-header" class="bg-gray-50 sticky top-0 z-10">
+                    </thead>
+                    <tbody id="data-tbody" class="divide-y">
+                    </tbody>
+                </table>
+            </div>
+            <div id="pagination-controls" class="mt-4 flex flex-col md:flex-row justify-between items-center text-sm text-gray-600 gap-2">
+            </div>
+        </div>
+    </main>
+
+    <div id="placeholder-content" class="flex-1 flex items-center justify-center text-gray-500">
+        Select a table to view its structure and data.
+    </div>
+</div>
+
+<div id="error-banner" class="hidden fixed top-5 right-5 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50" role="alert">
+    <strong class="font-bold">Error: </strong>
+    <span id="error-banner-message" class="block sm:inline"></span>
+    <button onclick="this.parentElement.classList.add('hidden')" class="absolute top-0 bottom-0 right-0 px-4 py-3">&times;</button>
+</div>
+
+<div id="create-table-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
+    <form id="create-table-form" class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b">
+            <h3 class="text-xl font-semibold">Create New Table</h3>
+        </div>
+        <div class="border-b">
+            <nav class="flex space-x-1 p-2 bg-gray-100">
+                <button type="button" data-tab="gui" class="create-table-tab-btn flex-1 p-2 text-sm font-medium rounded-md bg-white shadow">From Scratch</button>
+                <button type="button" data-tab="sql" class="create-table-tab-btn flex-1 p-2 text-sm font-medium rounded-md">From SQL</button>
+                <button type="button" data-tab="csv" class="create-table-tab-btn flex-1 p-2 text-sm font-medium rounded-md">From CSV</button>
+            </nav>
+        </div>
+        <div id="gui-create-tab" class="create-table-tab-content p-6 space-y-4 overflow-y-auto">
+            <input id="new-table-name" type="text" placeholder="Table Name (e.g., users)" required class="w-full p-2 border rounded-md">
+            <div id="new-columns-list" class="space-y-2 pt-2"></div>
+            <button id="add-column-to-modal-btn" type="button" class="text-sm text-blue-600 hover:underline mt-2 font-semibold">+ Add Column</button>
+        </div>
+        <div id="sql-create-tab" class="create-table-tab-content hidden p-6 space-y-4 overflow-y-auto">
+            <p class="text-sm text-gray-600">Paste a single `CREATE TABLE` statement below.</p>
+            <textarea id="create-table-sql-input" class="w-full h-64 p-2 border rounded-md font-mono text-sm" placeholder="CREATE TABLE products (...);"></textarea>
+        </div>
+        <div id="csv-create-tab" class="create-table-tab-content hidden p-6 space-y-4 overflow-y-auto">
+            <!-- Step 1: File Upload -->
+            <div id="import-step-1" class="space-y-4">
+                <div>
+                    <label for="import-table-name" class="block text-sm font-medium text-gray-700">New Table Name</label>
+                    <input id="import-table-name" type="text" placeholder="e.g., customers" required class="mt-1 w-full p-2 border rounded-md">
+                </div>
+                <div>
+                    <label for="import-csv-file" class="block text-sm font-medium text-gray-700">CSV File (with headers)</label>
+                    <input id="import-csv-file" type="file" accept=".csv" required class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+            </div>
+            <!-- Step 2: Review Columns -->
+            <div id="import-step-2" class="space-y-4 hidden">
+                <p class="text-sm text-gray-600">Review the detected columns and their inferred data types. You can make changes before importing.</p>
+                <div class="border rounded-lg overflow-hidden">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="p-2 text-left font-semibold">Original Header</th>
+                                <th class="p-2 text-left font-semibold">New Column Name (Sanitized)</th>
+                                <th class="p-2 text-left font-semibold">Data Type</th>
+                                <th class="p-2 text-center font-semibold">PK</th>
+                            </tr>
+                        </thead>
+                        <tbody id="csv-review-tbody" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="p-6 mt-auto border-t bg-gray-50 flex justify-end gap-4">
+            <button id="cancel-create-table-btn" type="button" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+            <button id="submit-create-table-btn" type="button" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed" disabled>Create Table</button>
+            <button id="import-csv-next-btn" type="button" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold hidden">Review Columns</button>
+            <button id="import-csv-submit-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-semibold hidden">Create & Import</button>
+        </div>
+    </form>
+</div>
+
+<div id="view-db-sql-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b flex justify-between items-center">
+            <h3 class="text-xl font-semibold">Database SQL Schema</h3>
+            <button id="close-db-sql-modal-btn" class="text-gray-500 hover:text-gray-800">&times;</button>
+        </div>
+        <div class="p-4 overflow-y-auto bg-[#282c34] text-white font-mono text-sm">
+            <pre><code id="db-sql-code-content"></code></pre>
+        </div>
+    </div>
+</div>
+
+<div id="edit-column-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
+    <form id="edit-column-form" class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-semibold mb-6">Edit Column</h3>
+        <input type="hidden" id="edit-column-index">
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Column Name</label>
+                <input type="text" id="edit-column-name" required class="mt-1 block w-full p-2 border rounded-md shadow-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Data Type</label>
+                <select id="edit-column-type" class="mt-1 block w-full p-2 border rounded-md shadow-sm bg-white">
+                    <option value="text">TEXT</option>
+                    <option value="integer">INTEGER</option>
+                    <option value="date">DATE</option>
+                    <option value="real">REAL</option>
+                    <option value="boolean">BOOLEAN</option>
+                    <option value="timestamp">TIMESTAMP</option>
+                    <option value="jsonb">JSONB</option>
+                </select>
+            </div>
+            <fieldset class="space-y-2 pt-2">
+                <legend class="text-sm font-medium text-gray-700">Constraints</legend>
+                <div class="grid grid-cols-2 gap-4">
+                    <label class="flex items-center"><input id="edit-is-not-null" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"> Not Null</label>
+                    <label class="flex items-center"><input id="edit-is-unique" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"> Unique</label>
+                </div>
+            </fieldset>
+        </div>
+        <div class="mt-8 flex justify-end gap-4">
+            <button id="cancel-edit-column-btn" type="button" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Save Changes</button>
+        </div>
+    </form>
+</div>
+
+<div id="delete-table-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold mb-4">Confirm Table Deletion</h3>
+        <p class="text-gray-700">Are you sure you want to delete the table "<strong id="modal-table-name"></strong>"? This will permanently delete all of its data. This action cannot be undone.</p>
+        <div class="mt-8 flex justify-end gap-4">
+            <button id="cancel-delete-table-btn" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+            <button id="confirm-delete-table-btn" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Delete</button>
+        </div>
+    </div>
+</div>
+
+<div id="import-rows-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
+    <form id="import-rows-form" class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b">
+            <h3 class="text-xl font-semibold">Import Rows into '<span id="import-rows-table-name"></span>'</h3>
+        </div>
+        <div class="p-6 space-y-4 overflow-y-auto">
+            <div>
+                <label for="import-rows-csv-file" class="block text-sm font-medium text-gray-700">CSV File</label>
+                <input id="import-rows-csv-file" type="file" accept=".csv" required class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+            <div id="import-rows-mapping-container" class="hidden space-y-3 pt-4">
+                <p class="text-sm font-medium text-gray-800">Map CSV columns to table columns:</p>
+                <div id="import-rows-mapping-fields" class="space-y-2 border-t pt-3">
+                    <!-- Mapping fields will be injected by JS -->
+                </div>
+            </div>
+        </div>
+        <div class="p-4 mt-auto border-t bg-gray-50 flex justify-end gap-4">
+            <button id="cancel-import-rows-btn" type="button" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold" disabled>Import Rows</button>
+        </div>
+    </form>
+</div>
+
+<div id="import-summary-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-xl font-semibold mb-4">Import Summary</h3>
+        <div id="import-summary-content" class="space-y-3 text-gray-700">
+        </div>
+        <div class="mt-6 flex justify-end gap-4">
+            <button id="close-summary-modal-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const supabaseUrl = '{{ supabase_url }}';
+const supabaseAnonKey = '{{ supabase_anon_key }}';
+const supabase = supabaseUrl && supabaseAnonKey ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (!supabase) { // Ensure Supabase is configured
+        document.body.innerHTML = '<div class="text-center p-8 text-red-600">Supabase client not configured. Please check your environment variables.</div>';
+        return;
+    }
+
+    // State
+    let state = {
+        dbId: null,
+        dbName: '{{ db_name }}',
+        tables: [],
+        fkDataCache: {},
+        selectedTable: null,
+        pagination: {
+            currentPage: 1, // This should match the default limit in the API
+            limit: 50, // This should match the default limit in the API
+            totalRows: 0
+        }
+    };
+
+    // DOM Elements
+    const tableList = document.getElementById('table-list');
+    const mainContent = document.getElementById('main-content');
+    const dataTableWrapper = document.getElementById('data-table-wrapper');
+    const placeholderContent = document.getElementById('placeholder-content');
+    const deleteTableBtn = document.getElementById('delete-table-btn');
+    const tableTabButtons = document.querySelectorAll('.table-tab-btn');
+    const tableTabContainer = document.getElementById('table-tabs-container');
+    const createTableBtn = document.getElementById('create-table-btn');
+    const createTableModal = document.getElementById('create-table-modal');
+    const createTableForm = document.getElementById('create-table-form');
+    const cancelCreateTableBtn = document.getElementById('cancel-create-table-btn');
+    const submitCreateTableBtn = document.getElementById('submit-create-table-btn');
+    const createTableTabButtonsInModal = document.querySelectorAll('#create-table-modal .create-table-tab-btn');
+    const guiCreateTab = document.getElementById('gui-create-tab');
+    const sqlCreateTab = document.getElementById('sql-create-tab');
+    const csvCreateTab = document.getElementById('csv-create-tab');
+    const addColumnToModalBtn = document.getElementById('add-column-to-modal-btn');
+    const deleteTableModal = document.getElementById('delete-table-modal');
+    const modalTableName = document.getElementById('modal-table-name');
+    const cancelDeleteTableBtn = document.getElementById('cancel-delete-table-btn');
+    const confirmDeleteTableBtn = document.getElementById('confirm-delete-table-btn');
+    const editColumnModal = document.getElementById('edit-column-modal');
+    const editColumnForm = document.getElementById('edit-column-form');
+    const cancelEditColumnBtn = document.getElementById('cancel-edit-column-btn');
+    const structureTbody = document.getElementById('structure-tbody');
+    const viewDbSqlBtn = document.getElementById('view-db-sql-btn');
+    const dbSqlCodeContent = document.getElementById('db-sql-code-content');
+    const viewDbSqlModal = document.getElementById('view-db-sql-modal');
+    const closeDbSqlModalBtn = document.getElementById('close-db-sql-modal-btn');
+    const importRowsBtn = document.getElementById('import-rows-btn');
+    const importRowsCsvFile = document.getElementById('import-rows-csv-file');
+    const addRowBtn = document.getElementById('add-row-btn');
+    const dataTbody = document.getElementById('data-tbody');
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+    const searchInput = document.getElementById('row-search-input');
+    const viewDbSqlSidebarBtn = document.getElementById('view-db-sql-sidebar-btn');
+    // CSV import elements are now part of the create table modal
+    const importCsvNextBtn = document.getElementById('import-csv-next-btn');
+    const importCsvSubmitBtn = document.getElementById('import-csv-submit-btn');
+    const importCsvFile = document.getElementById('import-csv-file');
+    const importStep1 = document.getElementById('import-step-1');
+    const importStep2 = document.getElementById('import-step-2');
+    const csvReviewTbody = document.getElementById('csv-review-tbody');
+    const importTableName = document.getElementById('import-table-name');
+    const importRowsModal = document.getElementById('import-rows-modal');
+    const importRowsForm = document.getElementById('import-rows-form');
+    const cancelImportRowsBtn = document.getElementById('cancel-import-rows-btn');
+    const importSummaryModal = document.getElementById('import-summary-modal');
+    const closeSummaryModalBtn = document.getElementById('close-summary-modal-btn');
+    const sidebar = document.getElementById('sidebar');
+    const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+    
+    // Abort controller to cancel stale data fetch requests
+    let dataFetchController = new AbortController();
+    let initialDataLoaded = false;
+
+    // --- UI & Error Handling ---
+    
+    function showError(message, error = null) {
+        const banner = document.getElementById('error-banner');
+        const bannerMessage = document.getElementById('error-banner-message');
+        bannerMessage.textContent = message;
+        banner.classList.remove('hidden');
+
+        if (error) {
+            console.error("An error occurred:", message, error);
+        }
+    }
+
+    // --- API & Helpers ---
+
+    /**
+     * A wrapper for the native fetch function that automatically includes
+     * the Supabase authentication token.
+     * @param {string} url - The URL to fetch.
+     * @param {object} options - The options for the fetch call (e.g., method, body).
+     * @returns {Promise<Response>} The fetch Response object.
+     */
+    async function fetchWithAuth(url, options = {}) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            window.location.href = '/login'; // Redirect if no session
+            throw new Error("User not authenticated.");
+        }
+        const token = session.access_token;
+        const headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+        return fetch(url, { ...options, headers });
+    }
+
+    async function getAuthToken() {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session || !session.user) {
+            console.error("Authentication error, redirecting to login.", error); // Clear any potentially stale token and redirect.
+            window.location.href = '/login';
+            return null;
+        }
+        return session.access_token;
+    }
+
+    /**
+     * Safely extracts a detailed error message from a fetch response.
+     * @param {Response} response - The fetch Response object.
+     * @returns {Promise<string>} A detailed error message.
+     */
+    async function getErrorFromResponse(response) {
+        const errorText = await response.text();
+        try {
+            const err = JSON.parse(errorText);
+            if (err.detail) {
+                if (typeof err.detail === 'string') {
+                    return err.detail; // It's a simple string error from the backend.
+                }
+                // Handle Pydantic validation errors which come as an array of objects.
+                if (Array.isArray(err.detail)) {
+                    const messages = err.detail.map(d => {
+                        const field = d.loc ? d.loc.slice(1).join(' -> ') : 'Field'; // e.g., body -> name becomes "name"
+                        return `${field}: ${d.msg}`;
+                    });
+                    return `Validation Error: ${messages.join('; ')}`;
+                }
+                return JSON.stringify(err.detail, null, 2);
+            }
+            return JSON.stringify(err, null, 2);
+        } catch (e) {
+            return `Server returned status ${response.status}. Response: ${errorText.substring(0, 500)}`;
+        }
+    }
+
+    function debounce(func, timeout = 300){
+        let timer;
+        return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => { func.apply(this, args); }, timeout);
+        };
+    }
+
+    // --- Data Fetching and Rendering ---
+
+    /**
+     * Fetches the database ID and its tables. Includes a retry mechanism to handle
+     * potential database replication lag immediately after creation.
+     */
+    async function fetchDbIdAndTables() {
+        const maxRetries = 5;
+        const retryDelay = 750; // ms
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // Fetch the database and its tables in a single API call.
+                const dbResponse = await fetchWithAuth(`/api/v1/databases/by-name/${encodeURIComponent(state.dbName)}`);
+
+                if (dbResponse.status === 404 && attempt < maxRetries) {
+                    console.log(`Attempt ${attempt}: Database not found, retrying in ${retryDelay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    continue;
+                }
+
+                if (!dbResponse.ok) {
+                    throw new Error(await getErrorFromResponse(dbResponse));
+                }
+
+                const dbWithTables = await dbResponse.json();
+                if (!dbWithTables) throw new Error(`Database '${state.dbName}' could not be loaded.`);
+                
+                // The API response now includes the tables under the `user_tables` key.
+                state.dbId = dbWithTables.id;
+                state.tables = dbWithTables.user_tables || [];
+                renderTables(state.tables);
+                initialDataLoaded = true;
+                return; // Exit the function successfully.
+
+            } catch (error) {
+                // If it's the last attempt, show the error.
+                if (attempt === maxRetries) {
+                    showError(`Failed to load database after ${maxRetries} attempts: ${error.message}`, error);
+                }
+            }
+        }
+
+        // If the loop finishes without success, show a final error state in the UI.
+        if (!initialDataLoaded) {
+            tableList.innerHTML = `<p class="text-sm text-red-500 p-2">Error loading tables.</p>`;
+            createTableBtn.disabled = true;
+            createTableBtn.title = "Cannot create table: failed to load database details.";
+            placeholderContent.textContent = `Error: Could not load database '${state.dbName}'. It may not exist or you may not have access.`; // Allow a retry on the next auth event
+        }
+    }
+
+    function renderTables(tables) {
+        tableList.innerHTML = '';
+        if (tables.length === 0) {
+            tableList.innerHTML = `<p class="text-sm text-gray-500 p-2">No tables yet.</p>`;
+            return;
+        }
+        tables.forEach(table => {
+            const tableLink = document.createElement('a');
+            tableLink.href = '#';
+            tableLink.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-100';
+            tableLink.textContent = table.name;
+            tableLink.dataset.tableId = table.id;
+            tableList.appendChild(tableLink);
+        });
+    }
+
+    async function cacheForeignKeyData(table) {
+        if (!table || !table.columns) return;
+        
+        state.fkDataCache = {};
+
+        const fkColumns = table.columns.filter(c => c.foreign_key);
+        for (const col of fkColumns) {
+            const fkInfo = col.foreign_key;
+            const referencedTableId = fkInfo.table_id;
+
+            if (state.fkDataCache[referencedTableId]) continue;
+
+            try {
+                const response = await fetchWithAuth(`/api/v1/tables/${referencedTableId}/all-rows`);
+                if (!response.ok) throw new Error(`Failed to fetch data for FK table ${referencedTableId}`);
+                const rows = await response.json();
+                
+                const referencedTable = state.tables.find(t => t.id === referencedTableId);
+                if (!referencedTable) throw new Error(`Could not find metadata for referenced table ${referencedTableId}`);
+                
+                const pkColumn = referencedTable.columns.find(c => c.is_primary_key);
+                if (!pkColumn) throw new Error(`Referenced table ${referencedTableId} has no primary key.`);
+
+                state.fkDataCache[referencedTableId] = {
+                    rows: rows,
+                    pkColumn: pkColumn.name,
+                    displayColumn: fkInfo.column_name
+                };
+            } catch (error) {
+                console.error(`Error caching FK data for table ${referencedTableId}:`, error);
+                state.fkDataCache[referencedTableId] = { rows: [], error: error.message };
+            }
+        }
+    }
+
+    async function handleTableSelect(e) {
+        if (e.target.tagName === 'A') {
+            e.preventDefault();
+            const tableId = e.target.dataset.tableId;
+            state.selectedTable = state.tables.find(t => t.id == tableId);
+            if (!state.selectedTable) return;
+
+            tableList.querySelectorAll('a').forEach(a => a.classList.remove('bg-blue-100', 'text-blue-700', 'font-semibold'));
+            e.target.classList.add('bg-blue-100', 'text-blue-700', 'font-semibold');
+            
+            // Await FK caching before rendering data to prevent race conditions.
+            await cacheForeignKeyData(state.selectedTable);
+            fetchAndRenderData(state.selectedTable.id, 1);
+
+            mainContent.classList.remove('hidden');
+            placeholderContent.classList.add('hidden');
+            deleteTableBtn.disabled = false;
+            tableTabContainer.classList.remove('hidden');
+            document.querySelector('.table-tab-btn[data-tab="data"]').click();
+            renderStructure(state.selectedTable.columns);
+            renderTableSql(state.selectedTable);
+        }
+    }
+
+    function renderStructure(columns) {
+        const tbody = document.getElementById('structure-tbody');
+        tbody.innerHTML = '';
+        if (!columns || columns.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-500">This table has no columns defined.</td></tr>`;
+            return;
+        }
+
+        columns.forEach((col, index) => {
+            const tr = document.createElement('tr');
+            const checkmark = `<span class="text-green-600 font-bold">&#10003;</span>`;
+            tr.innerHTML = `
+                <td class="p-3 font-mono">${col.name}</td>
+                <td class="p-3 font-mono text-purple-600 uppercase">${col.type === 'serial' ? 'SERIAL (PK)' : col.type}</td>
+                <td class="p-3 text-center">${col.is_not_null ? checkmark : ''}</td>
+                <td class="p-3 text-center">${col.is_primary_key ? checkmark : ''}</td>
+                <td class="p-3 text-center">${col.is_unique ? checkmark : ''}</td>
+                <td class="p-3 font-mono text-xs">${col.foreign_key ? `-> ${state.tables.find(t => t.id === col.foreign_key.table_id)?.name}.${col.foreign_key.column_name}` : ''}</td>
+                <td class="p-3 text-center">
+                    ${!col.is_primary_key ? `
+                        <div class="flex items-center justify-center gap-2">
+                            <button data-column-index="${index}" class="edit-column-btn text-gray-500 hover:text-blue-600" title="Edit Column"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L14.732 3.732z"></path></svg></button>
+                            <button data-column-index="${index}" class="delete-column-btn text-gray-500 hover:text-red-600" title="Delete Column"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                        </div>
+                    ` : ''}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function fetchAndRenderData(tableId, page = 1, searchTerm = '') {
+        // Abort any ongoing fetch to prevent race conditions
+        dataFetchController.abort();
+        dataFetchController = new AbortController();
+        const signal = dataFetchController.signal;
+
+
+        state.pagination.currentPage = page;
+        const offset = (page - 1) * state.pagination.limit;
+
+        const thead = document.querySelector('#data-tab-content table thead');
+        const tbody = document.getElementById('data-tbody');
+        const loader = document.getElementById('data-table-loader');
+        const columns = state.selectedTable.columns.sort((a, b) => a.is_primary_key ? -1 : 1);
+        
+        loader.classList.remove('hidden');
+
+        const searchParam = searchTerm ? `&search=${encodeURIComponent(searchTerm)}` : '';
+
+        try {
+            const response = await fetchWithAuth(`/api/v1/tables/${tableId}/rows?limit=${state.pagination.limit}&offset=${offset}${searchParam}`, { signal });
+            if (!response.ok) throw new Error(await getErrorFromResponse(response));
+            const result = await response.json();
+            const rows = result.data;
+            state.pagination.totalRows = result.total;
+
+            // Programmatic DOM creation to avoid innerHTML and potential CSP issues
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+            
+            const headerRow = document.getElementById('data-table-header').insertRow();
+            headerRow.innerHTML = '<th class="p-3 w-24">Actions</th>';
+            columns.forEach(col => {
+                const th = document.createElement('th');
+                th.className = 'p-3 text-left font-semibold';
+                th.textContent = col.name;
+                headerRow.appendChild(th);
+            });
+            
+            if (rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${columns.length + 1}" class="p-8 text-center text-gray-500">No data in this table.</td></tr>`;
+            } else {
+                rows.forEach(row => {
+                    tbody.appendChild(renderRow(row, columns));
+                });
+            }
+            renderPagination();
+        } catch (error) {
+            if (error.name === 'AbortError') { // This is an expected outcome, not an error.
+                console.log('Data fetch aborted by new request.');
+                return;
+            }
+            console.error(error);
+            tbody.innerHTML = `<tr><td colspan="99" class="p-4 text-center text-red-500">Error loading data: ${error.message}</td></tr>`;
+        } finally {
+            loader.classList.add('hidden');
+        }
+    }
+
+    function renderRow(row, columns, isNew = false) {
+        const tr = document.createElement('tr');
+        if (isNew) {
+            tr.dataset.isNew = 'true';
+            tr.classList.add('bg-yellow-50'); // Style for new, unsaved rows
+        } else {
+            tr.dataset.rowId = row.id;
+        }
+
+        const actionsTd = document.createElement('td');
+        actionsTd.className = 'p-3 text-center flex items-center justify-center gap-3';
+        actionsTd.innerHTML = `
+            <button class="save-row-btn text-gray-400 hover:text-green-600" title="Save Row">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            </button>
+            <button class="delete-row-btn text-gray-400 hover:text-red-600" title="${isNew ? 'Cancel' : 'Delete Row'}">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        `;
+        tr.appendChild(actionsTd);
+
+        columns.forEach(col => { // Data Cells
+            const td = document.createElement('td');
+            td.className = 'p-1';
+            td.dataset.columnName = col.name;
+
+            const cellValue = !isNew && row.data ? (row.data[col.name] ?? '') : '';
+
+            if (col.foreign_key) {
+                const fkInfo = col.foreign_key;
+                const cacheEntry = state.fkDataCache[fkInfo.table_id];
+
+                if (cacheEntry && !cacheEntry.error) {
+                    const select = document.createElement('select');
+                    select.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 fk-select';
+                    select.innerHTML = '<option value="">-- Select --</option>';
+                    cacheEntry.rows.forEach(fkRow => {
+                        const optionValue = fkRow.data[cacheEntry.pkColumn] ?? fkRow.id;
+                        const optionText = fkRow.data[cacheEntry.displayColumn] ?? `(ID: ${optionValue})`;
+                        const option = new Option(optionText, optionValue);
+                        if (optionValue == cellValue) option.selected = true;
+                        select.add(option);
+                    });
+                    td.appendChild(select);
+                } else {
+                    td.className = 'p-3 font-mono text-sm text-red-500';
+                    td.textContent = 'FK Error';
+                }
+            } else {
+                if (col.is_primary_key) {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    if (isNew && col.is_auto_increment) {
+                        input.value = '(auto)';
+                        input.placeholder = '(auto)';
+                    } else {
+                        input.value = cellValue;
+                    }
+                    input.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 editable-cell-input';
+                    input.readOnly = col.is_auto_increment;
+                    input.classList.toggle('bg-gray-100', col.is_auto_increment);
+                    td.appendChild(input);
+                } else if (col.type === 'boolean') { // --- BOOLEAN ---
+                    const select = document.createElement('select');
+                    select.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 boolean-select';
+                    const isTrue = ['true', 't', '1', true].includes(String(cellValue).toLowerCase());
+                    const isFalse = ['false', 'f', '0', false].includes(String(cellValue).toLowerCase());
+                    select.innerHTML = `
+                        <option value="" ${!isTrue && !isFalse ? 'selected' : ''}>--</option>
+                        <option value="true" ${isTrue ? 'selected' : ''}>True</option>
+                        <option value="false" ${isFalse ? 'selected' : ''}>False</option>
+                    `;
+                    td.appendChild(select);
+                } else if (col.type === 'timestamp' || col.type === 'date') { // --- DATE/TIMESTAMP ---
+                    const input = document.createElement('input');
+                    input.type = 'date';
+                    const dateValue = cellValue ? new Date(cellValue).toISOString().split('T')[0] : '';
+                    input.value = dateValue;
+                    input.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 timestamp-input';
+                    td.appendChild(input);
+                } else { // --- TEXT/NUMBER ---
+                    const input = document.createElement('input');
+                    const inputType = (col.type === 'integer' || col.type === 'real') ? 'number' : 'text';
+                    input.type = inputType;
+                    input.value = cellValue;
+                    input.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 editable-cell-input';
+                    td.appendChild(input);
+                }
+            }
+            tr.appendChild(td);
+        });
+
+        return tr;
+    }
+
+    function renderTableSql(table) {
+        const codeElement = document.getElementById('table-sql-code');
+        if (!table || !table.name) {
+            codeElement.textContent = '-- No table selected --';
+            return;
+        }
+        let createStatement = `CREATE TABLE "${table.name}" (\n`;
+        const columnDefs = table.columns.map(col => {
+            let parts = [`  "${col.name}"`, (col.is_auto_increment ? 'SERIAL' : (col.type || 'TEXT')).toUpperCase()];
+            const constraints = new Set();
+            if (col.is_primary_key) constraints.add("PRIMARY KEY");
+            if (col.is_not_null) constraints.add("NOT NULL");
+            if (col.is_unique) constraints.add("UNIQUE");
+            
+            parts.push(...constraints);
+            return parts.join(' ');
+        });
+
+        createStatement += columnDefs.join(',\n');
+        createStatement += "\n);";
+        codeElement.textContent = createStatement;
+        hljs.highlightElement(codeElement);
+    }
+
+    // --- UI Event Handlers (Tabs, Modals, Sidebar) ---
+
+    tableTabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tab = button.dataset.tab;
+
+            tableTabButtons.forEach(btn => {
+                btn.classList.remove('border-blue-500', 'text-blue-600');
+                btn.classList.add('border-transparent', 'text-gray-500');
+            });
+            button.classList.add('border-blue-500', 'text-blue-600');
+            button.classList.remove('border-transparent', 'text-gray-500');
+
+            document.querySelectorAll('.table-tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+
+            const activeContent = document.getElementById(`${tab}-tab-content`);
+            if (activeContent) {
+                activeContent.classList.remove('hidden');
+            }
+        });
+    });
+    
+    // Event Listeners for Create Table Modal Tabs
+    createTableTabButtonsInModal.forEach(button => {
+        button.addEventListener('click', () => {
+            const tab = button.dataset.tab;
+
+            // Update button styles
+            createTableTabButtonsInModal.forEach(btn => {
+                btn.classList.remove('bg-white', 'shadow');
+            });
+            button.classList.add('bg-white', 'shadow');
+
+            // Show/hide tab content
+            guiCreateTab.classList.toggle('hidden', tab !== 'gui');
+            sqlCreateTab.classList.toggle('hidden', tab !== 'sql');
+            csvCreateTab.classList.toggle('hidden', tab !== 'csv');
+
+            // Show/hide footer buttons based on tab
+            submitCreateTableBtn.classList.toggle('hidden', tab === 'csv');
+            importCsvNextBtn.classList.toggle('hidden', tab !== 'csv' || importStep2.classList.contains('hidden') === false);
+            importCsvSubmitBtn.classList.toggle('hidden', tab !== 'csv' || importStep2.classList.contains('hidden') === true);
+
+            if (tab === 'csv') {
+                checkImportCsvNextButtonState();
+            } else {
+                validateCreateTableForm();
+            }
+        });
+    });
+    
+    function openModal(modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
+    }
+
+    function closeModal(modal) {
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 250);
+    }
+
+    function toggleSidebar() {
+        const isCollapsed = sidebar.classList.toggle('collapsed');
+        if (isCollapsed) {
+            sidebar.classList.remove('w-72');
+            sidebar.classList.add('w-20');
+        } else {
+            sidebar.classList.remove('w-20');
+            sidebar.classList.add('w-72');
+        }
+        document.getElementById('collapse-icon').classList.toggle('hidden', isCollapsed);
+        document.getElementById('expand-icon').classList.toggle('hidden', !isCollapsed);
+        
+        localStorage.setItem('sidebarCollapsed', isCollapsed);
+    }
+
+    // --- Create Table Logic ---
+
+    function checkAndCollapseSidebar() {
+        if (window.innerWidth < 768 && !sidebar.classList.contains('collapsed')) {
+            toggleSidebar();
+        }
+    }
+    function createColumnRow(isPk = false) {
+        const tableOptions = state.tables.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+
+        const div = document.createElement('div');
+        div.className = 'column-row grid grid-cols-12 gap-2 items-center border-t pt-2';
+        div.innerHTML = `
+            <div class="col-span-12 grid grid-cols-12 gap-2 items-center">
+                <input type="text" data-key="name" placeholder="column_name" required class="col-span-3 p-2 border rounded-md" ${isPk ? 'value="id"' : ''}>
+                <select data-key="type" class="col-span-2 p-2 border rounded-md bg-white" ${isPk ? 'disabled' : ''}>
+                    ${isPk ? '<option value="integer" selected>INTEGER (PK)</option>' : `
+                    <option value="text" selected>TEXT</option>
+                    <option value="integer">INTEGER</option>
+                    <option value="real">REAL</option>
+                    <option value="boolean">BOOLEAN</option>
+                    <option value="timestamp">TIMESTAMP</option>
+                    <option value="date">DATE</option>
+                    <option value="jsonb">JSONB</option>
+                    `}
+                </select>
+                <div class="col-span-3 flex items-center justify-around text-xs">
+                    <label class="flex flex-col items-center" title="Set this as an auto-incrementing primary key. The type will become SERIAL."><input data-key="is_auto_increment" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked' : 'disabled'}><span>Auto-Inc</span></label>
+                    <label class="flex flex-col items-center"><input data-key="is_not_null" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked disabled' : ''}><span>Not Null</span></label>
+                    <label class="flex flex-col items-center"><input data-key="is_unique" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked disabled' : ''}><span>Unique</span></label> 
+                </div>
+            </div>
+            <div class="col-span-12 mt-2 pl-1">
+                <label class="flex items-center text-xs cursor-pointer"><input type="checkbox" data-key="is_foreign_key" class="fk-checkbox h-4 w-4 rounded mr-2" ${isPk ? 'disabled' : ''}><span>Is Foreign Key</span></label>
+                <div class="fk-options-container hidden grid grid-cols-2 gap-2 mt-2 pl-6">
+                    <select data-key="fk_table_id" class="fk-table-select p-1 border rounded-md bg-white text-xs">
+                        <option value="">-- Select Table --</option>
+                        ${tableOptions}
+                    </select>
+                    <select data-key="fk_column_name" class="fk-column-select p-1 border rounded-md bg-white text-xs" disabled><option value="">-- Select Column --</option></select>
+                </div>
+            </div>
+            <div class="col-span-4 flex justify-end">
+                ${!isPk ? '<button type="button" class="remove-column-btn bg-red-100 text-red-700 px-2 py-1 text-xs rounded-md hover:bg-red-200">Delete</button>' : ''}
+            </div>
+            <input type="hidden" data-key="is_primary_key" value="${isPk}">
+        `;
+        return div;
+    }
+
+    function validateCreateTableForm() {
+        const tableName = document.getElementById('new-table-name').value.trim();
+        let allColumnsNamed = true;
+        document.querySelectorAll('#new-columns-list .column-row').forEach(row => {
+            const colName = row.querySelector('[data-key="name"]').value.trim();
+            if (!colName) {
+                allColumnsNamed = false;
+            }
+        });
+        const isValid = tableName && allColumnsNamed;
+        submitCreateTableBtn.disabled = !isValid;
+    }
+    
+    function resetCsvImportForm() {
+        document.getElementById('import-table-name').value = '';
+        document.getElementById('import-csv-file').value = '';
+        importStep1.classList.remove('hidden');
+        importStep2.classList.add('hidden');
+        checkImportCsvNextButtonState();
+    }
+
+    function resetCreateTableModal() {
+        document.getElementById('new-table-name').value = '';
+        const columnsList = document.getElementById('new-columns-list');
+        columnsList.innerHTML = '';
+        columnsList.appendChild(createColumnRow(true)); // Add default PK
+        validateCreateTableForm();
+        
+        resetCsvImportForm();
+        
+        createTableTabButtonsInModal[0].click();
+        
+        document.getElementById('create-table-sql-input').value = '';
+    }
+
+    // This is a more robust way to handle the submit button click, especially when
+    // other libraries like CodeMirror might interfere with form submission events.
+    submitCreateTableBtn.addEventListener('click', (e) => {
+        handleCreateTableSubmit(e);
+    });
+
+    async function handleCreateTableSubmit(e) {
+        e.preventDefault();
+        const activeTab = document.querySelector('#create-table-modal .create-table-tab-btn.bg-white')?.dataset.tab;
+        let payload, url;
+        let method = 'POST';
+
+        submitCreateTableBtn.disabled = true;
+        submitCreateTableBtn.textContent = 'Creating...';
+
+        if (activeTab === 'csv') { // The CSV import has its own submit button and logic.
+            return;
+        } else if (activeTab === 'gui') {
+            url = `/api/v1/databases/by-name/${encodeURIComponent(state.dbName)}/tables`;
+            const tableName = document.getElementById('new-table-name').value.trim();
+            const columnRows = document.querySelectorAll('#new-columns-list .column-row'); // Use the new, more robust endpoint that finds the database by name.
+            
+            const columns = Array.from(columnRows).map(row => {
+                const isFk = row.querySelector('[data-key="is_foreign_key"]').checked;
+                let fk = null;
+                if (isFk) {
+                    const tableId = row.querySelector('[data-key="fk_table_id"]').value;
+                    const columnName = row.querySelector('[data-key="fk_column_name"]').value;
+                    if (tableId && columnName) {
+                        fk = {
+                            table_id: parseInt(tableId, 10),
+                            column_name: columnName
+                        };
+                    }
+                }
+                return {
+                    name: row.querySelector('[data-key="name"]').value,
+                    type: row.querySelector('[data-key="type"]').value,
+                    is_primary_key: row.querySelector('[data-key="is_primary_key"]').value === 'true',
+                    is_auto_increment: row.querySelector('[data-key="is_auto_increment"]').checked,
+                    is_not_null: row.querySelector('[data-key="is_not_null"]').checked,
+                    is_unique: row.querySelector('[data-key="is_unique"]').checked,
+                    foreign_key: fk
+                };
+            });
+            payload = { name: tableName, columns };
+
+        } else { // activeTab === 'sql' // This endpoint still requires an ID. Ensure it's available.
+            if (!state.dbId) throw new Error("Database ID not loaded. Cannot create table from SQL.");
+
+            url = `/api/v1/databases/${state.dbId}/create-table-from-sql`; // This endpoint still requires an ID
+            const sqlScript = document.getElementById('create-table-sql-input').value.trim();
+            payload = { script: sqlScript };
+        }
+
+        try {
+            const response = await fetchWithAuth(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) {
+                const errorDetail = await getErrorFromResponse(response);
+                throw new Error(errorDetail);
+            }
+            closeModal(createTableModal);
+            const newTable = await response.json();
+            await fetchDbIdAndTables();
+            // Auto-select the newly created table
+            const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
+            if (newTableLink) {
+                newTableLink.click();
+            }
+        } catch (error) {
+            showError(error.message, error);
+        } finally {
+            submitCreateTableBtn.disabled = false;
+            submitCreateTableBtn.textContent = 'Create Table';
+        }
+    }
+
+    // --- Table & Row Actions ---
+
+    async function handleDeleteTable() {
+        if (!state.selectedTable) return;
+        const url = `/api/v1/tables/${state.selectedTable.id}`;
+        try {
+            const response = await fetchWithAuth(url, { method: 'DELETE' });
+            if (!response.ok) {
+                const errorDetail = await getErrorFromResponse(response);
+                throw new Error(errorDetail);
+            }
+            closeModal(deleteTableModal);
+            mainContent.classList.add('hidden');
+            placeholderContent.classList.remove('hidden');
+            tableTabContainer.classList.add('hidden');
+            deleteTableBtn.disabled = true;
+            state.selectedTable = null;
+            await fetchDbIdAndTables();
+        } catch (error) {
+            showError(error.message || 'Failed to delete table.', error);
+        }
+    }
+
+    async function handleAddRow() {
+        if (!state.selectedTable) return;
+        const columns = state.selectedTable.columns.sort((a, b) => a.is_primary_key ? -1 : 1);
+        const newRowElement = renderRow({}, columns, true);
+        dataTbody.prepend(newRowElement);
+    }
+
+    async function handleDeleteRow(rowElement) {
+        const isNew = rowElement.dataset.isNew === 'true';
+        
+        if (isNew) {
+            rowElement.remove(); // Just remove from UI if it was never saved
+            return;
+        }
+
+        const rowId = rowElement.dataset.rowId;
+        const confirmationMessage = 'Are you sure you want to delete this row?';
+        if (confirm(confirmationMessage)) {
+            try {
+                const response = await fetchWithAuth(`/api/v1/rows/${rowId}`, { method: 'DELETE' });
+                if (!response.ok) {
+                    const errorDetail = await getErrorFromResponse(response);
+                    throw new Error(errorDetail);
+                }
+                // On success, refresh the data grid. This is more robust than just removing the row from the UI.
+                await fetchAndRenderData(state.selectedTable.id, state.pagination.currentPage, searchInput.value.trim());
+            } catch (error) {
+                showError(error.message || 'Failed to delete row.', error);
+            }
+        }
+    }
+
+    async function handleExportCsv() {
+        if (!state.selectedTable) return;
+        exportCsvBtn.textContent = 'Exporting...';
+        exportCsvBtn.disabled = true;
+
+        try {
+            const response = await fetchWithAuth(`/api/v1/tables/${state.selectedTable.id}/all-rows`);
+            if (!response.ok) throw new Error('Could not fetch data for export.');
+
+            const rows = await response.json();
+            if (rows.length === 0) {
+                showError('Table is empty, nothing to export.');
+                return;
+            }
+
+            const columns = state.selectedTable.columns.map(c => c.name);
+            const csvRows = [columns.join(',')];
+            rows.forEach(row => {
+                const values = columns.map(colName => {
+                    const value = colName === 'id' ? row.id : (row.data ? (row.data[colName] ?? '') : ''); // Basic CSV escaping: wrap in quotes if it contains a comma or quote
+                    const strValue = String(value);
+                    if (strValue.includes(',') || strValue.includes('"')) {
+                        return `"${strValue.replace(/"/g, '""')}"`;
+                    };
+                    return strValue;
+                });
+                csvRows.push(values.join(','));
+            });
+
+            const csvContent = csvRows.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${state.selectedTable.name}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            showError(`Error exporting CSV: ${error.message}`, error);
+        } finally {
+            exportCsvBtn.textContent = 'Export to CSV';
+            exportCsvBtn.disabled = false;
+        }
+    }
+
+    async function handleSaveRow(rowElement) {
+        const isNew = rowElement.dataset.isNew === 'true';
+        const rowId = rowElement.dataset.rowId;
+
+        const rowData = {};
+        rowElement.querySelectorAll('td[data-column-name]').forEach(cell => {
+            const colName = cell.dataset.columnName;
+            const input = cell.querySelector('input, select');
+            if (input) rowData[colName] = input.value;
+        });
+
+        const payload = { data: rowData };
+        const url = isNew ? `/api/v1/tables/${state.selectedTable.id}/rows` : `/api/v1/rows/${rowId}`;
+        const method = isNew ? 'POST' : 'PUT';
+
+        const saveButton = rowElement.querySelector('.save-row-btn');
+        saveButton.disabled = true;
+
+        try {
+            const response = await fetchWithAuth(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) {
+                const errorDetail = await getErrorFromResponse(response);
+                throw new Error(errorDetail);
+            }
+
+            // On success, re-fetch the current page AND re-cache FK data in case it changed.
+            await cacheForeignKeyData(state.selectedTable);
+            await fetchAndRenderData(state.selectedTable.id, state.pagination.currentPage, searchInput.value.trim());
+
+        } catch (error) {
+            showError(`Save failed: ${error.message}`, error);
+            saveButton.disabled = false; // Re-enable button on failure
+        }
+    }
+
+    function renderPagination() {
+        const { currentPage, limit, totalRows } = state.pagination;
+        const paginationControls = document.getElementById('pagination-controls');
+        paginationControls.innerHTML = '';
+
+        if (totalRows === 0) { // Don't show pagination if there are no results
+            return;
+        }
+
+        if (totalRows <= limit && currentPage === 1) return;
+
+        const totalPages = Math.ceil(totalRows / limit);
+        const startRow = totalRows > 0 ? (currentPage - 1) * limit + 1 : 0;
+        const endRow = Math.min(currentPage * limit, totalRows);
+
+        const info = document.createElement('div');
+        info.textContent = `Showing ${startRow} to ${endRow} of ${totalRows} rows`;
+        
+        const buttons = document.createElement('div');
+        buttons.className = 'flex gap-2';
+        buttons.innerHTML = `
+            <button data-page="${currentPage - 1}" class="prev-page-btn px-3 py-1 border rounded-md bg-white hover:bg-gray-100" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>
+            <span class="px-3 py-1">Page ${currentPage} of ${totalPages}</span>
+            <button data-page="${currentPage + 1}" class="next-page-btn px-3 py-1 border rounded-md bg-white hover:bg-gray-100" ${currentPage >= totalPages ? 'disabled' : ''}>Next</button>
+        `;
+
+        paginationControls.appendChild(info);
+        paginationControls.appendChild(buttons);
+    }
+
+    // --- Structure/Column Actions ---
+
+    async function saveTableStructure() {
+        if (!state.selectedTable) return false;
+
+        const payload = {
+            name: state.selectedTable.name,
+            columns: state.selectedTable.columns
+        };
+
+        try {
+            const response = await fetchWithAuth(`/api/v1/tables/${state.selectedTable.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorDetail = await getErrorFromResponse(response);
+                throw new Error(errorDetail);
+            }
+
+            const updatedTable = await response.json();
+            const tableIndex = state.tables.findIndex(t => t.id === updatedTable.id);
+            if (tableIndex > -1) state.tables[tableIndex] = updatedTable;
+            state.selectedTable = updatedTable;
+            await fetchAndRenderData(state.selectedTable.id, 1, searchInput.value.trim());
+            renderStructure(state.selectedTable.columns); // Success
+            return true;
+        } catch (error) {
+            showError(`Error: ${error.message}`, error); // Failure
+            await fetchDbIdAndTables(); // Re-fetch to revert optimistic changes
+            return false; // Failure
+        }
+    }
+
+    function populateAndOpenEditModal(column, index) {
+        document.getElementById('edit-column-index').value = index;
+        document.getElementById('edit-column-name').value = column.name;
+        document.getElementById('edit-column-type').value = column.type;
+        document.getElementById('edit-is-not-null').checked = column.is_not_null;
+        document.getElementById('edit-is-unique').checked = column.is_unique;
+        document.getElementById('edit-column-type').disabled = !!column.foreign_key;
+        openModal(editColumnModal);
+    }
+
+    async function handleEditColumnSubmit(e) {
+        e.preventDefault();
+        const index = parseInt(document.getElementById('edit-column-index').value, 10);
+        state.selectedTable.columns[index].name = document.getElementById('edit-column-name').value;
+        state.selectedTable.columns[index].type = document.getElementById('edit-column-type').value;
+        state.selectedTable.columns[index].is_not_null = document.getElementById('edit-is-not-null').checked;
+        state.selectedTable.columns[index].is_unique = document.getElementById('edit-is-unique').checked;
+        
+        if (await saveTableStructure()) {
+            closeModal(editColumnModal);
+        }
+    }
+
+    // --- Full DB SQL View ---
+
+    async function handleViewDbSql() {
+        if (!state.dbId) return;
+        
+        dbSqlCodeContent.textContent = 'Loading SQL...';
+        openModal(viewDbSqlModal);
+
+        try {
+            const response = await fetchWithAuth(`/api/v1/databases/${state.dbId}/export-sql`);
+            if (!response.ok) throw new Error('Failed to fetch database SQL');
+            
+            const sqlText = await response.text();
+            dbSqlCodeContent.textContent = sqlText;
+            hljs.highlightElement(dbSqlCodeContent);
+        } catch (error) {
+            dbSqlCodeContent.textContent = `-- Error fetching SQL: ${error.message}`;
+        }
+    }
+
+    // --- Import/Export ---
+
+    importRowsBtn.addEventListener('click', () => {
+        if (!state.selectedTable) return;
+        document.getElementById('import-rows-table-name').textContent = state.selectedTable.name;
+        importRowsForm.reset();
+        document.getElementById('import-rows-mapping-container').classList.add('hidden');
+        importRowsForm.querySelector('button[type="submit"]').disabled = true;
+        openModal(importRowsModal);
+        closeModal(importSummaryModal);
+    });
+
+    function checkImportCsvNextButtonState() {
+        const file = importCsvFile.files[0];
+        const tableName = importTableName.value.trim();
+        importCsvNextBtn.disabled = !file || !tableName;
+    }
+
+    importCsvFile.addEventListener('change', () => {
+        const file = importCsvFile.files[0];
+        if (file) {
+            importTableName.value = file.name.replace(/\.csv$/i, '').replace(/[^a-z0-9_]+/gi, '_').toLowerCase();
+        }
+        checkImportCsvNextButtonState();
+    });
+    importTableName.addEventListener('input', checkImportCsvNextButtonState);
+
+    importCsvNextBtn.addEventListener('click', async () => {
+        const file = document.getElementById('import-csv-file').files[0];
+        const tableName = importTableName.value.trim();
+        if (!file || !tableName) {
+            showError('Table name and CSV file are required.');
+            return;
+        }
+
+        importCsvNextBtn.disabled = true;
+        importCsvNextBtn.textContent = 'Processing...';
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const csvContent = e.target.result;
+            try {
+                const response = await fetchWithAuth('/api/v1/import-csv/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ csv_content: csvContent })
+                });
+                if (!response.ok) throw new Error(await getErrorFromResponse(response));
+                const previewData = await response.json();
+                
+                csvReviewTbody.innerHTML = ''; // Populate review table
+                let pk_found = false;
+                previewData.sanitized_headers.forEach((header, i) => {
+                    const is_pk = header === 'id' && !pk_found;
+                    if (is_pk) pk_found = true;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="p-2 font-mono text-gray-600">${previewData.original_headers[i]}</td>
+                        <td class="p-2 font-mono">${header}</td>
+                        <td class="p-2">
+                            <select data-col-name="${header}" class="csv-col-type-select w-full p-1 border rounded-md bg-white">
+                                <option value="text">TEXT</option>
+                                <option value="integer">INTEGER</option>
+                                <option value="real">REAL</option>
+                                <option value="boolean">BOOLEAN</option>
+                                <option value="timestamp">TIMESTAMP</option>
+                            </select>
+                        </td>
+                        <td class="p-2 text-center">
+                            <input type="checkbox" data-col-name="${header}" class="csv-col-pk-checkbox h-4 w-4 rounded" ${is_pk ? 'checked' : ''}>
+                        </td>
+                    `;
+                    csvReviewTbody.appendChild(tr);
+                    tr.querySelector('.csv-col-type-select').value = previewData.inferred_types[i];
+                });
+
+                importStep1.classList.add('hidden'); // Switch to step 2
+                importStep2.classList.remove('hidden');
+                importCsvNextBtn.classList.add('hidden');
+                importCsvSubmitBtn.classList.remove('hidden');
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                importCsvNextBtn.disabled = false;
+                importCsvNextBtn.textContent = 'Review Columns';
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    importCsvSubmitBtn.addEventListener('click', async () => {
+        const tableName = importTableName.value.trim();
+        
+        const columns = [];
+        csvReviewTbody.querySelectorAll('tr').forEach(tr => {
+            const name = tr.children[1].textContent;
+            const type = tr.querySelector('.csv-col-type-select').value;
+            const is_pk = tr.querySelector('.csv-col-pk-checkbox').checked;
+            columns.push({
+                name: name,
+                type: type,
+                is_primary_key: is_pk,
+                is_not_null: is_pk,
+                is_unique: is_pk,
+                foreign_key: null
+            });
+        });
+
+        importCsvSubmitBtn.disabled = true;
+        importCsvSubmitBtn.textContent = 'Importing...';
+
+        const fileReader = new FileReader();
+        fileReader.onload = async (e) => {
+            const csvContent = e.target.result;
+            const payload = {
+                name: tableName,
+                csv_content: csvContent,
+                columns: columns
+            };
+
+            try {
+                const response = await fetchWithAuth(`/api/v1/databases/${state.dbId}/import-csv`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!response.ok) {
+                const errorDetail = await getErrorFromResponse(response);
+                throw new Error(errorDetail);
+                }
+                closeModal(createTableModal);
+                const newTable = await response.json();
+                await fetchDbIdAndTables();
+                const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
+                if (newTableLink) newTableLink.click();
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                importCsvSubmitBtn.disabled = false;
+                importCsvSubmitBtn.textContent = 'Create Table & Import';
+            }
+        };
+        fileReader.readAsText(document.getElementById('import-csv-file').files[0]);
+    });
+
+    cancelImportRowsBtn.addEventListener('click', () => closeModal(importRowsModal));
+
+    importRowsCsvFile.addEventListener('change', () => {
+        const file = importRowsCsvFile.files[0];
+        const mappingContainer = document.getElementById('import-rows-mapping-container');
+        const mappingFields = document.getElementById('import-rows-mapping-fields');
+        const submitBtn = importRowsForm.querySelector('button[type="submit"]');
+
+        if (!file) {
+            mappingContainer.classList.add('hidden');
+            submitBtn.disabled = true;
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const firstLine = e.target.result.split('\n')[0].trim();
+            const csvHeaders = firstLine.split(',').map(h => h.trim().replace(/"/g, ''));
+            const tableColumns = state.selectedTable.columns.filter(c => !c.is_primary_key);
+
+            mappingFields.innerHTML = '';
+            tableColumns.forEach(col => {
+                const div = document.createElement('div');
+                div.className = 'grid grid-cols-2 gap-4 items-center';
+                div.innerHTML = `
+                    <label class="text-right font-medium text-gray-700">${col.name} <span class="font-mono text-xs text-purple-600">(${col.type})</span></label>
+                    <select data-table-col="${col.name}" class="import-rows-col-select p-2 border rounded-md bg-white">
+                        <option value="">-- Don't Import --</option>
+                        ${csvHeaders.map(h => `<option value="${h}">${h}</option>`).join('')}
+                    </select>
+                `;
+                mappingFields.appendChild(div);
+                const matchingHeader = csvHeaders.find(h => h.toLowerCase().replace(/[\s_]+/g, '') === col.name.toLowerCase().replace(/[\s_]+/g, '')); // Auto-select if header matches column name
+                if (matchingHeader) {
+                    div.querySelector('select').value = matchingHeader;
+                }
+            });
+            mappingContainer.classList.remove('hidden');
+            submitBtn.disabled = false;
+        };
+        reader.readAsText(file);
+    });
+
+    importRowsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const file = importRowsCsvFile.files[0];
+        if (!file || !state.selectedTable) return;
+
+        const columnMapping = {};
+        document.querySelectorAll('.import-rows-col-select').forEach(select => {
+            if (select.value) {
+                columnMapping[select.dataset.tableCol] = select.value;
+            }
+        });
+
+        if (Object.keys(columnMapping).length === 0) {
+            showError('You must map at least one CSV column.');
+            return;
+        }
+
+        const submitBtn = importRowsForm.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Importing...';
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const csvContent = e.target.result;
+            try {
+                const response = await fetchWithAuth(`/api/v1/tables/${state.selectedTable.id}/import-rows-from-csv`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ csv_content: csvContent, column_mapping: columnMapping })
+                });
+                if (!response.ok) throw new Error(await getErrorFromResponse(response));
+                const result = await response.json();
+                closeModal(importRowsModal);
+                // Show summary modal after import
+                const summaryContent = document.getElementById('import-summary-content');
+                summaryContent.innerHTML = `
+                    <p><strong class="font-semibold text-green-600">${result.inserted_count}</strong> rows were successfully imported.</p>
+                    <p><strong class="font-semibold text-red-600">${result.failed_count}</strong> rows failed to import.</p>
+                `;
+                if (result.failed_count > 0) {
+                    const errorReportLink = document.createElement('a');
+                    errorReportLink.href = "#";
+                    errorReportLink.className = "text-blue-600 hover:underline font-semibold";
+                    errorReportLink.textContent = "Download Error Report (CSV)";
+                    errorReportLink.onclick = (e) => {
+                        e.preventDefault();
+                        generateErrorCsv(result.errors);
+                    };
+                    const p = document.createElement('p');
+                    p.className = "mt-4";
+                    p.appendChild(errorReportLink);
+                    summaryContent.appendChild(p);
+                }
+                openModal(importSummaryModal);
+
+                if (result.inserted_count > 0) {
+                    await fetchAndRenderData(state.selectedTable.id, 1);
+                }
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Import Rows';
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    function generateErrorCsv(errors) {
+        if (!errors || errors.length === 0) return;
+
+        const originalHeaders = Object.keys(errors[0].data);
+        const csvHeaders = ['Row Number', 'Error', ...originalHeaders];
+        
+        const csvRows = [csvHeaders.join(',')];
+        errors.forEach(err => {
+            const values = [
+                err.row_number,
+                `"${err.error.replace(/"/g, '""')}"`, // Escape quotes
+                ...originalHeaders.map(h => { // in error message
+                    const value = err.data[h] ?? '';
+                    const strValue = String(value);
+                    if (strValue.includes(',') || strValue.includes('"')) {
+                        return `"${strValue.replace(/"/g, '""')}"`;
+                    }
+                    return strValue;
+                })
+            ];
+            csvRows.push(values.join(','));
+        });
+
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `import_error_report.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // --- Event Listeners Initialization ---
+
+    // Sidebar
+    toggleSidebarBtn.addEventListener('click', toggleSidebar);
+    tableList.addEventListener('click', handleTableSelect);
+
+    // Modals
+    closeSummaryModalBtn.addEventListener('click', () => closeModal(importSummaryModal));
+    createTableBtn.addEventListener('click', () => {
+        resetCreateTableModal();
+        openModal(createTableModal);
+    });
+    cancelCreateTableBtn.addEventListener('click', () => closeModal(createTableModal));
+    
+    deleteTableBtn.addEventListener('click', () => {
+        if (!state.selectedTable) return;
+        modalTableName.textContent = state.selectedTable.name;
+        openModal(deleteTableModal);
+    });
+    cancelDeleteTableBtn.addEventListener('click', () => closeModal(deleteTableModal));
+    confirmDeleteTableBtn.addEventListener('click', handleDeleteTable);
+    
+    editColumnForm.addEventListener('submit', handleEditColumnSubmit);
+    cancelEditColumnBtn.addEventListener('click', () => closeModal(editColumnModal));
+
+    // Structure Tab
+    structureTbody.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.edit-column-btn');
+        const deleteBtn = e.target.closest('.delete-column-btn');
+
+        if (editBtn) {
+            const index = parseInt(editBtn.dataset.columnIndex, 10);
+            populateAndOpenEditModal(state.selectedTable.columns[index], index);
+        }
+
+        if (deleteBtn) {
+            const index = parseInt(deleteBtn.dataset.columnIndex, 10);
+            const column = state.selectedTable.columns[index];
+            if (confirm(`Are you sure you want to delete the column "${column.name}"?`)) {
+                state.selectedTable.columns.splice(index, 1);
+                saveTableStructure();
+            }
+        }
+    });
+
+    // Data Tab
+    addRowBtn.addEventListener('click', handleAddRow);
+    exportCsvBtn.addEventListener('click', handleExportCsv);
+    dataTbody.addEventListener('click', (e) => {
+        const deleteBtn = e.target.closest('.delete-row-btn');
+        const saveBtn = e.target.closest('.save-row-btn');
+
+        if (deleteBtn) {
+            handleDeleteRow(deleteBtn.closest('tr'));
+        }
+        if (saveBtn) {
+            handleSaveRow(saveBtn.closest('tr'));
+        }
+    });
+
+    const debouncedSearch = debounce(() => {
+        const searchTerm = searchInput.value.trim();
+        if (state.selectedTable) {
+            fetchAndRenderData(state.selectedTable.id, 1, searchTerm);
+        }
+    });
+    searchInput.addEventListener('input', debouncedSearch);
+
+    // Pagination
+    document.getElementById('pagination-controls').addEventListener('click', (e) => {
+        const target = e.target.closest('button');
+        if (target && (target.classList.contains('prev-page-btn') || target.classList.contains('next-page-btn'))) {
+            const page = parseInt(target.dataset.page, 10);
+            if (page && state.selectedTable) {
+                fetchAndRenderData(state.selectedTable.id, page);
+            }
+        }
+    });
+
+    // SQL Tab
+    document.getElementById('copy-table-sql-btn').addEventListener('click', (e) => {
+        const code = document.getElementById('table-sql-code').textContent;
+        navigator.clipboard.writeText(code).then(() => {
+            e.target.textContent = 'Copied!';
+            setTimeout(() => e.target.textContent = 'Copy', 2000);
+        });
+    });
+    viewDbSqlBtn.addEventListener('click', handleViewDbSql);
+    viewDbSqlSidebarBtn.addEventListener('click', handleViewDbSql);
+    closeDbSqlModalBtn.addEventListener('click', () => closeModal(viewDbSqlModal));
+
+    // Create Table Modal (GUI Tab)
+    createTableModal.addEventListener('input', (e) => {
+        if (e.target.matches('#new-table-name, [data-key="name"]')) { // This handles typing in the table name or any column name
+            validateCreateTableForm();
+        }
+    });
+    document.getElementById('new-columns-list').addEventListener('change', (e) => {
+        if (e.target.classList.contains('fk-checkbox')) {
+            const container = e.target.closest('.column-row').querySelector('.fk-options-container');
+            container.classList.toggle('hidden', !e.target.checked);
+        }
+        // Auto-increment checkbox logic
+        if (e.target.matches('[data-key="is_auto_increment"]')) {
+            const isChecked = e.target.checked;
+            const row = e.target.closest('.column-row');
+            const typeSelect = row.querySelector('[data-key="type"]');
+            if (isChecked) {
+                typeSelect.innerHTML = '<option value="serial" selected>SERIAL</option>';
+                typeSelect.disabled = true;
+            } else {
+                typeSelect.innerHTML = '<option value="integer" selected>INTEGER</option>'; // Or restore previous options
+                typeSelect.disabled = false;
+            }
+        }
+        // FK table select
+        if (e.target.classList.contains('fk-table-select')) {
+            const tableId = e.target.value;
+            const columnSelect = e.target.closest('.fk-options-container').querySelector('.fk-column-select');
+            columnSelect.innerHTML = '<option value="">-- Select Column --</option>';
+            columnSelect.disabled = true;
+
+            if (tableId) {
+                const targetTable = state.tables.find(t => t.id == tableId);
+                if (targetTable) {
+                    targetTable.columns.forEach(col => {
+                        columnSelect.innerHTML += `<option value="${col.name}">${col.name}</option>`;
+                    });
+                    columnSelect.disabled = false;
+                }
+            }
+        }
+    });
+
+    document.getElementById('new-columns-list').addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-column-btn')) {
+            e.target.closest('.column-row').remove(); // Re-validate when a column is removed
+            validateCreateTableForm();
+        }
+    });
+
+    addColumnToModalBtn.addEventListener('click', () => {
+        document.getElementById('new-columns-list').appendChild(createColumnRow());
+        validateCreateTableForm(); // Re-validate when a new column is added
+    });
+
+    // --- App Initialization ---
+    
+    // Check for saved sidebar state on load
+    if (localStorage.getItem('sidebarCollapsed') === 'true') {
+        toggleSidebar();
+    }
+    checkAndCollapseSidebar(); // Collapse on mobile on initial load
+    
+    supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
+            if (session) {
+                if (!initialDataLoaded) { // Fetch data if it hasn't been loaded yet.
+                    fetchDbIdAndTables();
+                }
+            } else {
+                window.location.href = '/login';
+            }
+        } else if (event === 'SIGNED_OUT') {
+            window.location.href = '/login';
+        }
+    });
+});
+</script>
+
+</body>
+</html>
