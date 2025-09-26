@@ -1,4 +1,5 @@
 # Forcing a new Vercel build on 2025-09-08
+# Forcing a new Vercel build to load latest environment variables
 # Forcing a Vercel resync on 2025-09-08 at 11:03 PM
 
 import os
