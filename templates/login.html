@@ -122,13 +122,6 @@
             }
         });
 
-        // --- FIX: Show a success message after email verification ---
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('message') === 'verification_success') {
-            successMessage.textContent = 'Email verified successfully! Please log in to continue.';
-            // Clean the URL
-            window.history.replaceState({}, document.title, "/login");
-        }
         const loginForm = document.getElementById('login-form');
         loginForm.addEventListener('submit', async (event) => {
             event.preventDefault();

@@ -418,23 +418,6 @@
 
             // Initial Load
             supabase.auth.onAuthStateChange((event, session) => {
-                // --- FIX: Handle the first sign-in after email verification ---
-                // When a user verifies their email, Supabase creates a temporary session.
-                // The 'SIGNED_IN' event fires when they first land on an authenticated page.
-                // We catch this, sign them out to clear the temporary session, and redirect
-            // them to the login page for a clean, intentional first login.
-            // FIX: The condition is now more specific. It checks if the user's last sign-in
-            // was within the last 15 seconds. This reliably identifies the temporary session
-            // from the email verification link without catching the user's first real login.
-            if (event === 'SIGNED_IN' && session?.user?.identities?.length === 1) {
-                const lastSignIn = new Date(session.user.last_sign_in_at);
-                const now = new Date();
-                if ((now - lastSignIn) < 15000) { // 15 seconds threshold
-                    supabase.auth.signOut();
-                    window.location.href = '/login?message=verification_success'; // Redirect to login
-                    return; // Stop further processing
-                }
-            }
                 if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
                     if (session) {
                         const user = session.user;

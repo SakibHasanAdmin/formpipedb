@@ -1445,6 +1445,12 @@ async def delete_success_page(request: Request):
     # This page is shown after a user successfully deletes their account.
     return templates.TemplateResponse("delete-success.html", {"request": request})
 
+@app.get("/email-verification", response_class=HTMLResponse)
+async def email_verification_page(request: Request):
+    """
+    A generic page shown after a user clicks a verification link from an email.
+    """
+    return templates.TemplateResponse("email-verification.html", {"request": request})
 
 @app.get("/email-verified", response_class=HTMLResponse)
 async def email_verified_page(request: Request):

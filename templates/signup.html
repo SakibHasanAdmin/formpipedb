@@ -204,9 +204,8 @@
                     data: {
                         full_name: fullName
                     },
-                    // --- FIX: Redirect directly to the login page after email verification for a smoother UX. ---
-                    // The login page is already set up to show a success message.
-                    emailRedirectTo: `${window.location.origin}/login?message=verification_success`
+                    // Redirect to a dedicated verification page after the user clicks the link.
+                    emailRedirectTo: `${window.location.origin}/email-verification`
                 }
             });
 
