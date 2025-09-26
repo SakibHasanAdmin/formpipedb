@@ -153,8 +153,7 @@ class ContactRequest(BaseModel):
     message: str
 
 class AuthenticatedAccountDeletionRequest(BaseModel):
-    password: str
-    confirmation: str = Field(..., pattern=r"^delete my account$")
+    confirmation: str = Field(..., pattern=r"^delete my account$", description="User must type 'delete my account' to confirm.")
 
 
 
@@ -1049,6 +1048,13 @@ async def delete_own_account(
     # dependency has already confirmed the user's identity is valid.
     user = auth_details["user"]
 
+    # 3. Explicitly check the confirmation text before proceeding.
+    # Pydantic's pattern matching handles this, but a user-friendly error is better.
+    if form_data.confirmation != "delete my account":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmation text does not match. Please type 'delete my account' exactly as shown."
+        )
     try:
         # 3. Create an admin client to perform the deletion.
         # We are skipping the password re-authentication step, as it is what triggers

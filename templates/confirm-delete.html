@@ -22,7 +22,6 @@
             </p>
         </div>
         <form id="delete-form" class="space-y-4">
-            <input type="password" id="password" placeholder="Your Password" required autocomplete="current-password" class="w-full px-4 py-2 text-gray-700 bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <div>
                 <label for="confirmation" class="text-sm text-gray-600">To confirm, please type <code>delete my account</code> below:</label>
                 <input type="text" id="confirmation" placeholder="delete my account" required autocomplete="off" class="w-full mt-1 px-4 py-2 text-gray-700 bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -70,7 +69,6 @@
                 deleteButton.textContent = "Deleting...";
 
                 const payload = {
-                    password: document.getElementById("password").value,
                     confirmation: document.getElementById("confirmation").value,
                 };
 
