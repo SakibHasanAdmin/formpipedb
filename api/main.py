@@ -1452,11 +1452,6 @@ async def email_verification_page(request: Request):
     """
     return templates.TemplateResponse("email-verification.html", {"request": request})
 
-@app.get("/email-verified", response_class=HTMLResponse)
-async def email_verified_page(request: Request):
-    # This page is shown after a user clicks the verification link in their email.
-    return templates.TemplateResponse("email-verified.html", {"request": request})
-
 @app.get("/app", response_class=HTMLResponse)
 async def app_page(request: Request):
     return templates.TemplateResponse(
