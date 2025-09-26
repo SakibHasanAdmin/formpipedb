@@ -1039,44 +1039,37 @@ async def delete_own_account(
     password and a confirmation phrase to prove their identity.
     """
     # 1. Check for required server configuration
-    if not SUPABASE_SERVICE_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Account deletion is not configured on the server."
-        )
+    # This check is no longer needed as we are using an RPC call
+    # that doesn't require the service key.
 
-    # 2. Get user details from the validated auth token provided by the dependency.
+    # 2. Get user details from the validated auth token.
     supabase = auth_details["client"]
     user = auth_details["user"]
-    user_id_to_delete = user.id
     user_email = user.email
 
     try:
         # 3. Re-authenticate the user by trying to sign in with their password.
         # This is the standard way to verify a user's password before a sensitive action.
-        # We use a temporary client for this check.
         temp_auth_client: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
         await asyncio.to_thread(
             temp_auth_client.auth.sign_in_with_password,
             {"email": user_email, "password": form_data.password}
         )
 
-        # 4. If re-authentication succeeds, create an admin client to delete the user.
-        # This client uses the SERVICE_ROLE_KEY and has full admin privileges.
-        supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-        
-        # The supabase-py library's delete_user is an async function.
-        await supabase_admin.auth.admin.delete_user(user_id_to_delete)
+        # 4. If re-authentication succeeds, call the RPC function to delete the user and all their data.
+        # The `supabase` client is already authenticated as the user, so the `auth.uid()`
+        # inside the PostgreSQL function will correctly identify them.
+        await asyncio.to_thread(supabase.rpc('delete_user_and_data', {}).execute)
 
         return {"message": "Account successfully deleted."}
 
     except APIError as e:
         # Catch the specific error for invalid login credentials.
         if 'Invalid login credentials' in e.message:
-            raise HTTPException(status_code=401, detail="Invalid password.")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password.")
         else:
             # Catch other potential API errors during the process.
-            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e.message}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {e.message}")
     except HTTPException as e:
         raise e  # Re-raise validation errors
     except Exception as e:
