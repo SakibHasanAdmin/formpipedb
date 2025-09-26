@@ -26,13 +26,12 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // The user lands here from the email link. The URL has a fragment (#) with the session.
-            // We need to redirect to the homepage, preserving the fragment, so the
-            // onAuthStateChange listener on the homepage can process it.
-            // We wait a moment to ensure the user sees this message.
-            setTimeout(() => {
-                window.location.href = '/' + window.location.hash;
-            }, 2500); // 2.5 second delay
+            // The user lands here from the email link. The URL has a fragment (#) with the session info.
+            // We need to redirect to the login page, preserving this fragment.
+            // The script on the login page will then handle the session, sign the user out,
+            // and display the success message.
+            // The redirect is immediate as this page's only job is to forward the user.
+            window.location.href = '/login' + window.location.hash;
         });
     </script>
 </body>

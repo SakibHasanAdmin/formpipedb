@@ -116,17 +116,24 @@
         const mainContent = document.getElementById('main-content');
 
         supabase.auth.onAuthStateChange((event, session) => {
-            // This event fires once on page load.
-            if (event === 'INITIAL_SESSION') {
+            // This event fires on page load and when the URL fragment changes.
+            if (event === 'SIGNED_IN') {
+                // This handles the case where a user verifies their email and is redirected
+                // here with a session in the URL fragment. We want to force them to log in manually.
+                const urlParams = new URLSearchParams(window.location.hash.substring(1));
+                if (urlParams.get('type') === 'signup') {
+                    // This was a signup verification. Log them out and show the success message.
+                    supabase.auth.signOut();
+                    successMessage.textContent = 'Email verified successfully! Please log in.';
+                    // Hide loader and show the login form.
+                    loader.style.display = 'none';
+                    mainContent.style.opacity = 1;
+                }
+            } else if (event === 'INITIAL_SESSION') {
                 if (session) {
                     // User is logged in, redirect immediately. The loader is still visible.
                     window.location.href = '/app';
                 } else {
-                    // Check if redirected from email verification
-                    const urlParams = new URLSearchParams(window.location.search);
-                    if (urlParams.get('verified') === 'true') {
-                        successMessage.textContent = 'Email verified successfully! Please log in.';
-                    }
                     // User is not logged in. Hide loader and show the login form.
                     loader.style.display = 'none';
                     mainContent.style.opacity = 1;
