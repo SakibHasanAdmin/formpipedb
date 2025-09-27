@@ -1395,7 +1395,7 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
         postgrest_url = f"{SUPABASE_URL}/rest/v1/"
         headers = {
             "apikey": SUPABASE_ANON_KEY,
-            "Authorization": auth_details["client"].postgrest.auth_token,
+            "Authorization": f"Bearer {auth_details['token']}",
             "Accept": "application/json"
         }
         # The query is sent as a URL parameter.
