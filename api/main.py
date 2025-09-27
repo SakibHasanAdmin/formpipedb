@@ -303,7 +303,7 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
         # This makes the table immediately queryable in the SQL Runner.
         try:
             supabase.rpc('create_or_replace_view_for_table', {
-                'p_table_id': created_table['id'],
+                'p_table_id': created_table['id'], # The view name will be constructed inside the function
                 'p_table_name': created_table['name'],
                 'p_columns': created_table['columns']
             }).execute()
@@ -707,7 +707,7 @@ async def update_database_table(table_id: int, table_data: TableUpdate, auth_det
         # This is the missing piece. Without this, the SQL Runner's view becomes outdated.
         try:
             supabase.rpc('create_or_replace_view_for_table', {
-                'p_table_id': updated_table['id'],
+                'p_table_id': updated_table['id'], # The view name will be constructed inside the function
                 'p_table_name': updated_table['name'],
                 'p_columns': updated_table['columns']
             }).execute()
@@ -1381,7 +1381,7 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
     query_no_multiline_comments = re.sub(r'/\*.*?\*/', '', query_data.query, flags=re.DOTALL)
     # Find the first non-empty line that doesn't start with a comment.
     query_lines = [line for line in query_no_multiline_comments.split('\n') if line.strip() and not line.strip().startswith('--')]
-    query = "\n".join(query_lines).strip()
+    query = "\n".join(query_lines).strip().rstrip(';')
 
     # Basic validation: only allow SELECT statements for security.
     if not query.upper().startswith("SELECT"):
