@@ -132,6 +132,10 @@ class PaginatedRowResponse(BaseModel):
 class QueryRequest(BaseModel):
     query: str
 
+class QueryResponse(BaseModel):
+    columns: List[str]
+    rows: List[Dict[str, Any]]
+
 class SqlImportRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
@@ -1363,6 +1367,51 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
         if new_db_id:
             await delete_user_database(new_db_id, auth_details)
         raise HTTPException(status_code=400, detail=f"Failed to import SQL script: {str(e)}. The new database has been rolled back.")
+
+@app.post("/api/v1/databases/{database_id}/query")
+async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details: dict = Depends(get_current_user_details)):
+    """
+    Executes a read-only SQL query within the user's security context.
+    This is designed to work with the views created for each table.
+    """
+    supabase = auth_details["client"]
+    query = query_data.query.strip()
+
+    # Basic validation: only allow SELECT statements for security.
+    if not query.upper().startswith("SELECT"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only SELECT queries are allowed.")
+
+    try:
+        # Verify user has access to the parent database first.
+        db_check = supabase.table("user_databases").select("id").eq("id", database_id).maybe_single().execute()
+        if not db_check.data:
+            raise HTTPException(status_code=404, detail="Database not found or access denied")
+
+        # Execute the query using a PostgreSQL function that returns JSON.
+        # This is safer than executing raw SQL directly in the API.
+        # We assume a function `execute_user_query` exists in the database.
+        # The function should handle execution and error trapping.
+        response = supabase.rpc('execute_user_query', {'query_text': query}).execute()
+        
+        result_data = response.data
+        
+        # The RPC function returns a single JSON object which might contain an error key.
+        if isinstance(result_data, dict) and 'error' in result_data:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query Error: {result_data['error']}")
+
+        # If the query returns no rows, the result might be None or an empty list.
+        if not result_data:
+            return {"columns": [], "rows": []}
+
+        columns = list(result_data[0].keys()) if result_data else []
+        return {"columns": columns, "rows": result_data}
+
+    except APIError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query execution failed: {e.message}")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
 
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
