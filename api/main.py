@@ -360,7 +360,7 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
     script = sql_data.script.strip()
 
     if not script.upper().startswith("CREATE TABLE"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Script must be a single CREATE TABLE statement.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Script must be a single CREATE TABLE statement. Only one table can be created at a time via this endpoint.")
 
     # --- FIX: Use the more robust regex from the main SQL import function ---
     create_match = re.search(r'CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*)\)', script, re.DOTALL | re.IGNORECASE)
@@ -368,8 +368,6 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CREATE TABLE syntax. Could not find table name and column definitions.")
 
     raw_table_name, columns_str = create_match.groups()
-    # Sanitize the table name to lowercase to prevent case-sensitivity issues
-    # when querying the view later.
     table_name = raw_table_name.lower()
     columns_defs = []
     table_level_fks = []
@@ -377,21 +375,18 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
     # This regex splits columns by comma, but correctly ignores commas inside parentheses.
     for col_line in re.split(r',(?![^()]*\))', columns_str.strip()):
         col_line = col_line.strip()
-        if not col_line: continue
- 
-        # Clean up common redundant keywords from broken SQL dumps
-        col_line = re.sub(r'\b(NOT NULL)\s+\1\b', r'\1', col_line, flags=re.IGNORECASE)
-        col_line = re.sub(r'\b(UNIQUE)\s+\1\b', r'\1', col_line, flags=re.IGNORECASE)
-        col_line = re.sub(r'\b(PRIMARY KEY)\s+\1\b', r'\1', col_line, flags=re.IGNORECASE)
+        if not col_line:
+            continue
 
         # Handle table-level foreign key definitions
         fk_match = re.search(r'FOREIGN KEY\s*\(([`"]?\w+[`"]?)\)\s*REFERENCES\s*[`"]?(\w+)[`"]?\s*\(([`"]?\w+[`"]?)\)', col_line, re.IGNORECASE)
         if fk_match:
-            source_col, ref_table_name, ref_col = fk_match.groups()
+            # This endpoint doesn't support creating foreign keys to other tables.
+            # We will just ignore this line.
             table_level_fks.append({
-                "source_col": source_col.strip('`"\''),
-                "ref_table_name": ref_table_name.strip('`"'),
-                "ref_col": ref_col.strip('`"\'')
+                "source_col": fk_match.group(1).strip('`"'),
+                "ref_table": fk_match.group(2).strip('`"'),
+                "ref_col": fk_match.group(3).strip('`"')
             })
             continue
 
@@ -399,39 +394,34 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
         if col_line.upper().startswith(("PRIMARY KEY", "UNIQUE", "CONSTRAINT", "CHECK")):
             continue
 
-        # Extract column name, type, and constraints
         parts = col_line.split()
-        if not parts: continue
+        if not parts:
+            continue
 
-        col_name = parts[0].strip('`"\'')
+        col_name = parts[0].strip('`"')
         type_and_constraints = " ".join(parts[1:]).strip() 
 
-        # --- FIX: Use the robust type extraction and DO NOT normalize ---
-        raw_col_type = _extract_sql_type(type_and_constraints)
+        col_type = _extract_sql_type(type_and_constraints)
 
-        # --- FIX: Add parsing for inline foreign keys ---
+        # This endpoint doesn't support creating foreign keys, but we parse to avoid errors.
         inline_fk_match = re.search(r'REFERENCES\s+[`"]?(\w+)[`"]?\s*\(([`"]?\w+[`"]?)\)', type_and_constraints, re.IGNORECASE)
         if inline_fk_match:
-            # This logic remains correct
-            ref_table_name, ref_col = inline_fk_match.groups()
             table_level_fks.append({
                 "source_col": col_name,
-                "ref_table_name": ref_table_name.strip('`"'),
-                "ref_col": ref_col.strip('`"\'')
+                "ref_table": inline_fk_match.group(1).strip('`"'),
+                "ref_col": inline_fk_match.group(2).strip('`"')
             })
 
-        # --- FIX: Detect auto-incrementing primary keys ---
         is_pk = "PRIMARY KEY" in type_and_constraints.upper()
-        # --- FIX: Default integer PKs to auto-increment if not specified ---
-        is_auto_increment = ('AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in raw_col_type.upper()) or \
-                            (is_pk and 'INT' in raw_col_type.upper() and 'AUTO_INCREMENT' not in type_and_constraints.upper())
+        is_auto_increment = ('AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()) or \
+                            (is_pk and 'INT' in col_type.upper() and 'AUTO_INCREMENT' not in type_and_constraints.upper())
 
         columns_defs.append(ColumnDefinition(
             name=col_name,
-            type=raw_col_type, # Use the original, full type
+            type=col_type,
             is_primary_key=is_pk,
             is_auto_increment=is_pk and is_auto_increment,
-            is_unique="UNIQUE" in type_and_constraints.upper() and "PRIMARY KEY" not in type_and_constraints.upper(), # A PK is implicitly unique
+            is_unique="UNIQUE" in type_and_constraints.upper(),
             is_not_null="NOT NULL" in type_and_constraints.upper()
         ))
 
@@ -440,10 +430,10 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
     created_table_dict = await create_database_table(database_id, table_create_payload, auth_details)
     created_table = TableResponse(**created_table_dict)
 
-    # If there are foreign keys, update the table definition
-    # This part is left for future enhancement if needed, as it requires resolving table names to IDs.
-    # For now, the basic table creation is a huge improvement.
-
+    # Note: This simplified endpoint does not create foreign keys.
+    # The full SQL import feature handles this. We've parsed them to avoid errors,
+    # but we don't act on them here.
+    
     return created_table
 
 # Helper function for CSV import
@@ -676,14 +666,13 @@ def _extract_sql_type(col_def_str: str) -> str:
     e.g., "VARCHAR(255) UNIQUE" -> "VARCHAR(255)"
     """
     # List of known constraints to strip from the end
-    constraints = [
-        'PRIMARY KEY', 'NOT NULL', 'NULL', 'UNIQUE', 'DEFAULT .*', r'CHECK \(.*\)', 
-        'REFERENCES .*', 'COLLATE .*'
-    ]
     # The regex looks for the data type at the start, which might include parentheses.
     # It stops at the first known constraint keyword.
-    match = re.match(r'^\s*([a-zA-Z_]+(?:\(\s*\d+(?:\s*,\s*\d+)?\s*\))?)', col_def_str, re.IGNORECASE)
-    return match.group(1) if match else 'TEXT'
+    # This is more robust than splitting by space.
+    match = re.match(r'^\s*([a-zA-Z_]+(?:\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))?)', col_def_str, re.IGNORECASE)
+    if match:
+        return match.group(1).upper()
+    return 'TEXT' # Fallback
 
 
 @app.put("/api/v1/tables/{table_id}", response_model=TableResponse)
@@ -1122,28 +1111,26 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
         create_statement += "\n);\n\n"
         sql_script += create_statement
 
-        # Generate INSERT statements
-        rows_dicts = await get_all_table_rows(table.id, auth_details)
-        if rows_dicts:
+        # --- FIX: Fetch raw rows directly to avoid incorrect PK injection from get_all_table_rows ---
+        # RLS on table_rows ensures user can only access rows they own.
+        raw_rows_res = supabase.table("table_rows").select("data").eq("table_id", table.id).order("id").execute()
+
+        if raw_rows_res.data:
             sql_script += f"-- Data for table: {table.name}\n"
-            for row_dict in rows_dicts:
-                # Skip rows that might not have any data in the JSONB field
-                if not row_dict.get('data'):
+            for row in raw_rows_res.data:
+                row_data = row.get('data')
+                if not row_data:
                     continue
 
-                # We only insert data from the 'data' blob. The user-visible PK is in here.
-                # We need to find the actual PK column name to exclude it if it's auto-incrementing.
                 pk_col = next((col for col in table.columns if col.is_primary_key), None)
                 pk_is_auto_increment = pk_col.is_auto_increment if pk_col else False
                 
-                columns_to_insert = [f'"{k}"' for k, v in row_dict['data'].items() if not (pk_is_auto_increment and k == pk_col.name)]
+                columns_to_insert = [f'"{k}"' for k, v in row_data.items() if not (pk_is_auto_increment and k == pk_col.name)]
                 values_to_insert = []
-                for k, v in row_dict['data'].items():
+                for k, v in row_data.items():
                     if pk_is_auto_increment and k == pk_col.name:
                         continue
-                    # The data from the DB is already a Python object.
-                    # If it's a string, we need to handle it correctly.
-                    # We need to handle the value as it is.
+
                     if isinstance(v, str):
                         # The value from JSONB is already a clean string. We just need to escape it for SQL.
                         escaped_v = v.replace("'", "''")
@@ -1381,11 +1368,29 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
     query_no_multiline_comments = re.sub(r'/\*.*?\*/', '', query_data.query, flags=re.DOTALL)
     # Find the first non-empty line that doesn't start with a comment.
     query_lines = [line for line in query_no_multiline_comments.split('\n') if line.strip() and not line.strip().startswith('--')]
-    query = "\n".join(query_lines).strip().rstrip(';')
+    original_query = "\n".join(query_lines).strip().rstrip(';')
 
     # Basic validation: only allow SELECT statements for security.
-    if not query.upper().startswith("SELECT"):
+    if not original_query.upper().startswith("SELECT"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only SELECT queries are allowed.")
+
+    # --- FIX: Automatically rewrite table names to their prefixed view names ---
+    # 1. Fetch all table names for the current database.
+    tables_res = supabase.table("user_tables").select("name").eq("database_id", database_id).execute()
+    if not tables_res.data:
+        # If there are no tables, we can just run the query as-is.
+        query = original_query
+    else:
+        # 2. Create a mapping from original table name to the prefixed view name.
+        table_names = [t['name'] for t in tables_res.data]
+        # Sort by length descending to replace longer names first (e.g., 'book_authors' before 'book').
+        table_names.sort(key=len, reverse=True)
+
+        # 3. Iteratively replace each table name in the query with its view name.
+        query = original_query
+        for name in table_names:
+            # Use a case-insensitive regex with word boundaries to avoid partial matches.
+            query = re.sub(r'\b' + re.escape(name) + r'\b', f'db_{database_id}_{name}', query, flags=re.IGNORECASE)
 
     try:
         # Verify user has access to the parent database first.
