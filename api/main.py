@@ -1450,7 +1450,12 @@ async def email_verification_page(request: Request):
     """
     A generic page shown after a user clicks a verification link from an email.
     """
-    return templates.TemplateResponse("email-verification.html", {"request": request})
+    return templates.TemplateResponse(
+        "email-verification.html", 
+        {
+            "request": request, "supabase_url": SUPABASE_URL, "supabase_anon_key": SUPABASE_ANON_KEY
+        }
+    )
 
 @app.get("/app", response_class=HTMLResponse)
 async def app_page(request: Request):

@@ -122,40 +122,23 @@
             // Clean the URL to avoid showing the message on refresh
             window.history.replaceState({}, document.title, "/login");
         }
-        // --- FIX: Handle the email verification and existing session flow ---
-        // This listener is key. It fires when the page loads and Supabase detects session
-        // info in the URL fragment, which happens after a user clicks the verification link.
-        supabase.auth.onAuthStateChange(async (event, session) => {
-            // After a user clicks the verification link, they are redirected here.
-            // Supabase automatically processes the token from the URL fragment and fires a SIGNED_IN event.
-            // We need to check if this is a new user who just verified their email.
-            if (event === "SIGNED_IN" && session?.user?.user_metadata?.new_user) {
-                // 1. Update the user's metadata to remove the 'new_user' flag.
-                // This MUST be done first, while the user is still in a valid session.
-                const { error: updateError } = await supabase.auth.updateUser({ data: { new_user: null } });
 
-                if (updateError) {
-                    // If this fails, log it, but proceed to sign out anyway.
-                    console.error('Failed to update user metadata:', updateError.message);
-                }
-
-                // 2. Now, sign the user out. This invalidates the temporary session from the email link.
-                await supabase.auth.signOut(); // This will trigger another 'SIGNED_OUT' event.
-                // The 'else' block of this listener will then handle showing the login form.
- 
-                // 4. Since we signed the user out, we now show the login form.
-                loader.style.display = 'none';
-                mainContent.style.opacity = '1';
-            } else if (session && !session?.user?.user_metadata?.new_user) {
-                // If there's any other valid session, redirect to the app.
+        // --- FIX: Use getSession() for a direct check instead of an event listener ---
+        // This is a more reliable way to check for an existing session on page load.
+        // It avoids race conditions and complex event handling for this simple check.
+        async function checkSessionAndShowPage() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                // If a valid session exists (from a previous "Remember me" login),
+                // redirect immediately to the application.
                 window.location.href = '/app';
             } else {
-                // If there's no session at all, just show the login form.
-                // This block now also handles the state after the user is signed out from verification.
+                // If there is no session, hide the loader and show the login form.
                 loader.style.display = 'none';
                 mainContent.style.opacity = '1';
             }
-        });
+        }
+        checkSessionAndShowPage();
 
         const loginForm = document.getElementById('login-form');
         loginForm.addEventListener('submit', async (event) => {

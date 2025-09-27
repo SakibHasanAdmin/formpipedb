@@ -202,8 +202,7 @@
                 options: {
                     captchaToken: captchaToken,
                     data: {
-                        full_name: fullName,
-                        new_user: true
+                        full_name: fullName
                     },
                     // Use an absolute URL for emailRedirectTo to ensure it overrides any Supabase project-level Site URL settings.
                     emailRedirectTo: `${window.location.origin}/email-verification`
