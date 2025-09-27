@@ -30,7 +30,7 @@
 <body class="bg-gray-50">
 
 <div class="h-screen flex">
-    <!-- Collapsible Sidebar -->
+    <!-- Collapsible Sidebar: w-72 for desktop, w-20 for collapsed, w-full for mobile overlay (future) -->
     <aside id="sidebar" class="w-72 bg-white border-r flex flex-col shrink-0">
         <div class="p-4 border-b overflow-hidden">
             <div class="sidebar-header-text">
@@ -52,6 +52,7 @@
         </nav>
         <div class="p-4 border-t space-y-2 overflow-hidden">
             <button id="create-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg><span class="sidebar-item-title">New Table</span></button>
+            <button id="sql-runner-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-gray-700 text-white hover:bg-gray-800 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span class="sidebar-item-title">SQL Runner</span></button>
             <button id="view-db-sql-sidebar-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v5c0 2.21 3.582 4 8 4s8-1.79 8-4V7"></path></svg><span class="sidebar-item-title">View DB SQL</span></button>
             <button id="delete-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg><span class="sidebar-item-title">Delete Table</span></button>
         </div>
@@ -63,8 +64,8 @@
         </div>
     </aside>
 
-    <main id="main-content" class="flex-1 p-4 md:p-8 overflow-auto hidden">
-        <div id="table-tabs-container" class="border-b mb-6 overflow-x-auto">
+    <main id="main-content" class="flex-1 p-4 sm:p-6 md:p-8 overflow-auto hidden">
+        <div id="table-tabs-container" class="border-b mb-4 sm:mb-6 overflow-x-auto">
             <nav class="flex space-x-6 whitespace-nowrap">
                 <button data-tab="data" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-blue-500 text-blue-600">Data</button>
                 <button data-tab="structure" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">Structure</button>
@@ -110,7 +111,7 @@
                 <div class="w-full md:w-1/3">
                     <input type="search" id="row-search-input" placeholder="Search rows..." class="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
-                <div class="flex gap-2 w-full md:w-auto">
+                <div class="flex gap-2 w-full md:w-auto justify-stretch">
                     <button id="add-row-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold">Add Row</button>
                     <button id="import-rows-btn" class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 flex-grow">Import Rows</button>
                     <button id="export-csv-btn" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 ml-2">Export to CSV</button>
@@ -139,6 +140,32 @@
     </div>
 </div>
 
+<!-- SQL Runner Content -->
+<div id="sql-runner-content" class="flex-1 p-4 sm:p-6 md:p-8 overflow-auto hidden flex flex-col">
+    <h2 class="text-2xl font-bold text-gray-800 mb-4">SQL Runner</h2>
+    <div class="flex flex-col space-y-4 flex-grow">
+        <!-- SQL Input Area -->
+        <div>
+            <label for="sql-query-input" class="block text-sm font-medium text-gray-700 mb-1">SQL Query</label>
+            <textarea id="sql-query-input" class="w-full h-40 p-2 border rounded-md font-mono text-sm bg-gray-900 text-white" placeholder="SELECT * FROM your_table_name;"></textarea>
+            <div class="mt-2 flex justify-end">
+                <button id="run-sql-query-btn" class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 font-semibold">Run Query</button>
+            </div>
+        </div>
+
+        <!-- Results Area -->
+        <div class="flex-grow flex flex-col">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Results</label>
+            <div id="sql-results-wrapper" class="flex-grow bg-white rounded-lg shadow-sm border overflow-auto relative">
+                <div id="sql-results-placeholder" class="p-8 text-center text-gray-500">
+                    Query results will appear here.
+                </div>
+                <!-- Results table will be injected here -->
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="error-banner" class="hidden fixed top-5 right-5 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50" role="alert">
     <strong class="font-bold">Error: </strong>
     <span id="error-banner-message" class="block sm:inline"></span>
@@ -151,7 +178,7 @@
             <h3 class="text-xl font-semibold">Create New Table</h3>
         </div>
         <div class="border-b">
-            <nav class="flex space-x-1 p-2 bg-gray-100">
+            <nav class="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-1 p-2 bg-gray-100">
                 <button type="button" data-tab="gui" class="create-table-tab-btn flex-1 p-2 text-sm font-medium rounded-md bg-white shadow">From Scratch</button>
                 <button type="button" data-tab="sql" class="create-table-tab-btn flex-1 p-2 text-sm font-medium rounded-md">From SQL</button>
                 <button type="button" data-tab="csv" class="create-table-tab-btn flex-1 p-2 text-sm font-medium rounded-md">From CSV</button>
@@ -196,7 +223,7 @@
                 </div>
             </div>
         </div>
-        <div class="p-6 mt-auto border-t bg-gray-50 flex justify-end gap-4">
+        <div class="p-4 sm:p-6 mt-auto border-t bg-gray-50 flex flex-col sm:flex-row justify-end gap-2 sm:gap-4">
             <button id="cancel-create-table-btn" type="button" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
             <button id="submit-create-table-btn" type="button" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed" disabled>Create Table</button>
             <button id="import-csv-next-btn" type="button" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold hidden">Review Columns</button>
@@ -281,7 +308,7 @@
                 </div>
             </div>
         </div>
-        <div class="p-4 mt-auto border-t bg-gray-50 flex justify-end gap-4">
+        <div class="p-4 sm:p-6 mt-auto border-t bg-gray-50 flex justify-end gap-4">
             <button id="cancel-import-rows-btn" type="button" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
             <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold" disabled>Import Rows</button>
         </div>
@@ -328,6 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tableList = document.getElementById('table-list');
     const mainContent = document.getElementById('main-content');
     const dataTableWrapper = document.getElementById('data-table-wrapper');
+    const sqlRunnerContent = document.getElementById('sql-runner-content');
     const placeholderContent = document.getElementById('placeholder-content');
     const deleteTableBtn = document.getElementById('delete-table-btn');
     const tableTabButtons = document.querySelectorAll('.table-tab-btn');
@@ -376,6 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSummaryModalBtn = document.getElementById('close-summary-modal-btn');
     const sidebar = document.getElementById('sidebar');
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+    const sqlRunnerBtn = document.getElementById('sql-runner-btn');
     
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
@@ -574,12 +603,15 @@ document.addEventListener('DOMContentLoaded', () => {
             tableList.querySelectorAll('a').forEach(a => a.classList.remove('bg-blue-100', 'text-blue-700', 'font-semibold'));
             e.target.classList.add('bg-blue-100', 'text-blue-700', 'font-semibold');
             
+            // Show table view, hide others
+            mainContent.classList.remove('hidden');
+            placeholderContent.classList.add('hidden');
+            sqlRunnerContent.classList.add('hidden');
+
             // Await FK caching before rendering data to prevent race conditions.
             await cacheForeignKeyData(state.selectedTable);
             fetchAndRenderData(state.selectedTable.id, 1);
 
-            mainContent.classList.remove('hidden');
-            placeholderContent.classList.add('hidden');
             deleteTableBtn.disabled = false;
             tableTabContainer.classList.remove('hidden');
             document.querySelector('.table-tab-btn[data-tab="data"]').click();
@@ -885,12 +917,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function createColumnRow(isPk = false) {
         const tableOptions = state.tables.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
 
-        const div = document.createElement('div');
-        div.className = 'column-row grid grid-cols-12 gap-2 items-center border-t pt-2';
+        const div = document.createElement('div'); // --- FIX: Make column row in modal responsive ---
+        div.className = 'column-row flex flex-col gap-2 border-t pt-3';
         div.innerHTML = `
-            <div class="col-span-12 grid grid-cols-12 gap-2 items-center">
-                <input type="text" data-key="name" placeholder="column_name" required class="col-span-3 p-2 border rounded-md" ${isPk ? 'value="id"' : ''}>
-                <select data-key="type" class="col-span-2 p-2 border rounded-md bg-white" ${isPk ? 'disabled' : ''}>
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                <input type="text" data-key="name" placeholder="column_name" required class="sm:col-span-4 p-2 border rounded-md" ${isPk ? 'value="id"' : ''}>
+                <select data-key="type" class="sm:col-span-3 p-2 border rounded-md bg-white" ${isPk ? 'disabled' : ''}>
                     ${isPk ? '<option value="integer" selected>INTEGER (PK)</option>' : `
                     <option value="text" selected>TEXT</option>
                     <option value="integer">INTEGER</option>
@@ -901,24 +933,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     <option value="jsonb">JSONB</option>
                     `}
                 </select>
-                <div class="col-span-3 flex items-center justify-around text-xs">
+                <div class="sm:col-span-4 flex items-center justify-around text-xs">
                     <label class="flex flex-col items-center" title="Set this as an auto-incrementing primary key. The type will become SERIAL."><input data-key="is_auto_increment" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked' : 'disabled'}><span>Auto-Inc</span></label>
                     <label class="flex flex-col items-center"><input data-key="is_not_null" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked disabled' : ''}><span>Not Null</span></label>
                     <label class="flex flex-col items-center"><input data-key="is_unique" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked disabled' : ''}><span>Unique</span></label> 
                 </div>
+                <div class="sm:col-span-1 flex justify-end">
+                    ${!isPk ? '<button type="button" class="remove-column-btn bg-red-100 text-red-700 px-2 py-1 text-xs rounded-md hover:bg-red-200">Delete</button>' : ''}
+                </div>
             </div>
-            <div class="col-span-12 mt-2 pl-1">
+            <div class="pl-1">
                 <label class="flex items-center text-xs cursor-pointer"><input type="checkbox" data-key="is_foreign_key" class="fk-checkbox h-4 w-4 rounded mr-2" ${isPk ? 'disabled' : ''}><span>Is Foreign Key</span></label>
-                <div class="fk-options-container hidden grid grid-cols-2 gap-2 mt-2 pl-6">
+                <div class="fk-options-container hidden grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pl-6">
                     <select data-key="fk_table_id" class="fk-table-select p-1 border rounded-md bg-white text-xs">
                         <option value="">-- Select Table --</option>
                         ${tableOptions}
                     </select>
                     <select data-key="fk_column_name" class="fk-column-select p-1 border rounded-md bg-white text-xs" disabled><option value="">-- Select Column --</option></select>
                 </div>
-            </div>
-            <div class="col-span-4 flex justify-end">
-                ${!isPk ? '<button type="button" class="remove-column-btn bg-red-100 text-red-700 px-2 py-1 text-xs rounded-md hover:bg-red-200">Delete</button>' : ''}
             </div>
             <input type="hidden" data-key="is_primary_key" value="${isPk}">
         `;
@@ -1582,9 +1614,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners Initialization ---
 
-    // Sidebar
+    // Sidebar & Mobile responsiveness
     toggleSidebarBtn.addEventListener('click', toggleSidebar);
     tableList.addEventListener('click', handleTableSelect);
+    sqlRunnerBtn.addEventListener('click', () => {
+        // Show SQL runner, hide other main content areas
+        sqlRunnerContent.classList.remove('hidden');
+        mainContent.classList.add('hidden');
+        placeholderContent.classList.add('hidden');
+
+        // Deselect any active table in the sidebar for visual clarity
+        tableList.querySelectorAll('a').forEach(a => a.classList.remove('bg-blue-100', 'text-blue-700', 'font-semibold'));
+        state.selectedTable = null;
+    });
 
     // Modals
     closeSummaryModalBtn.addEventListener('click', () => closeModal(importSummaryModal));
