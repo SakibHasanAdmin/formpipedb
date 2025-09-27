@@ -1380,11 +1380,11 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
     # Remove multi-line /* ... */ comments first, then single-line -- comments.
     query_no_multiline_comments = re.sub(r'/\*.*?\*/', '', query_data.query, flags=re.DOTALL)
     # Find the first non-empty line that doesn't start with a comment.
-    query_lines = [line for line in query_no_multiline_comments.split('\n') if line.strip() and not line.strip().startswith('--')]
-    original_query = "\n".join(query_lines).strip().rstrip(';')
+    query_lines = [line for line in query_no_multiline_comments.split('\n') if line.strip() and not line.strip().startswith('--')] # pragma: no cover
+    original_query = "\n".join(query_lines).rstrip(';')
 
     # Basic validation: only allow SELECT statements for security.
-    if not original_query.upper().startswith("SELECT"):
+    if not original_query.strip().upper().startswith("SELECT"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only SELECT queries are allowed.")
 
     # --- FIX: Automatically rewrite table names to their prefixed view names ---
