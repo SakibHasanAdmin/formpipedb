@@ -1375,7 +1375,13 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
     This is designed to work with the views created for each table.
     """
     supabase = auth_details["client"]
-    query = query_data.query.strip()
+
+    # --- FIX: Make query parsing more robust by stripping comments ---
+    # Remove multi-line /* ... */ comments first, then single-line -- comments.
+    query_no_multiline_comments = re.sub(r'/\*.*?\*/', '', query_data.query, flags=re.DOTALL)
+    # Find the first non-empty line that doesn't start with a comment.
+    query_lines = [line for line in query_no_multiline_comments.split('\n') if line.strip() and not line.strip().startswith('--')]
+    query = "\n".join(query_lines).strip()
 
     # Basic validation: only allow SELECT statements for security.
     if not query.upper().startswith("SELECT"):
@@ -1401,19 +1407,25 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
         # The query is sent as a URL parameter.
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{postgrest_url}?select=*", params={"sql": query}, headers=headers)
-            result_data = response.json()
+
+        # --- FIX: Add robust error handling for non-200 responses ---
+        if response.status_code != 200:
+            try:
+                error_data = response.json()
+                # Supabase errors have a 'message' key.
+                error_message = error_data.get('message', 'An unknown query error occurred.')
+            except Exception:
+                # If the response isn't JSON, use the raw text.
+                error_message = response.text
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query failed: {error_message}")
+
+        result_data = response.json()
 
         if not result_data:
             return {"columns": [], "rows": []}
 
         columns = list(result_data[0].keys()) if result_data else []
         return {"columns": columns, "rows": result_data}
-
-    except APIError as e:
-        # The httpx request won't raise an APIError, but we'll catch PostgREST's JSON error response.
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=f"Query execution failed: {result_data.get('message', 'Unknown error')}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query execution failed: {e.message}") # Keep for other potential API errors
     except HTTPException as e:
         raise e
     except Exception as e:
