@@ -55,8 +55,10 @@
 
                     // 3. After a short delay to allow the user to read the success message,
                     //    redirect to the homepage. The session is already cleared.
-                    setTimeout(() => {
-                        window.location.replace('/');
+                    //    redirect to the login page with a success parameter. The session is already cleared.
+                    //    The login page will show a "Your email has been verified!" message.
+                    setTimeout(() => { 
+                        window.location.replace('/login?verified=true');
                     }, 3000); // 3-second delay
                 }
             });
