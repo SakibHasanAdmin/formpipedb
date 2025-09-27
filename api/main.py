@@ -142,6 +142,7 @@ class SqlImportRequest(BaseModel):
     script: str
 
 class SqlTableCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
     script: str
 
 # --- FIX: Conditionally use EmailStr to prevent crash if 'email-validator' is not installed ---
@@ -367,8 +368,8 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
     if not create_match:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CREATE TABLE syntax. Could not find table name and column definitions.")
 
-    raw_table_name, columns_str = create_match.groups()
-    table_name = raw_table_name.lower()
+    _, columns_str = create_match.groups()
+    table_name = sql_data.name # Use the name from the request body
     columns_defs = []
     table_level_fks = []
  
@@ -1415,6 +1416,18 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
         # The user's JWT is passed, so all queries are executed within their security context,
         # respecting RLS policies on the underlying views.
         # We POST to a non-existent function name; PostgREST will execute the SQL from the body instead.
+
+        # --- FIX: Wrap the query in a transaction that sets the search_path ---
+        # This ensures that the user's query can find the views (e.g., db_45_books)
+        # which are located in the 'public' schema. Without this, PostgreSQL might
+        # not know where to look, causing a "relation does not exist" error.
+        final_sql_payload = f"""
+        BEGIN;
+        SET LOCAL search_path = public, extensions;
+        {query};
+        COMMIT;
+        """
+
         postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/run_user_query"
         headers = {
             "apikey": SUPABASE_ANON_KEY,
@@ -1424,7 +1437,7 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
         }
         # The query is sent in the request body.
         async with httpx.AsyncClient() as client:
-            response = await client.post(postgrest_url, headers=headers, json={"sql": query})
+            response = await client.post(postgrest_url, headers=headers, json={"sql": final_sql_payload})
 
         # --- FIX: Add robust error handling for non-200 responses ---
         if response.status_code != 200:

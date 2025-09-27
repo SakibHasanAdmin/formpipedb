@@ -1065,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             url = `/api/v1/databases/${state.dbId}/create-table-from-sql`; // This endpoint still requires an ID
             const sqlScript = document.getElementById('create-table-sql-input').value.trim();
-            payload = { script: sqlScript };
+            payload = { name: "default_name_from_sql_tab", script: sqlScript };
         }
 
         try {
