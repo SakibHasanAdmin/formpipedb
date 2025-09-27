@@ -1348,6 +1348,18 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
             if statement.upper().startswith("INSERT INTO"):
                 await _parse_and_execute_insert(statement, created_tables_map, new_db_id, supabase, user)
         
+        # --- FIX: After all tables and data are imported, create the views for the SQL runner ---
+        final_tables_res = await get_database_tables(new_db_id, auth_details)
+        for table in final_tables_res:
+            try:
+                supabase.rpc('create_or_replace_view_for_table', {
+                    'p_table_id': table['id'],
+                    'p_table_name': table['name'],
+                    'p_columns': table['columns']
+                }).execute()
+            except Exception as view_error:
+                print(f"Warning: Could not create view for imported table {table['id']} ({table['name']}): {view_error}")
+
         return db_response
     except Exception as e:
         # If any part of the process fails, roll back by deleting the created database.
