@@ -27,11 +27,11 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // The user lands here from the email link. The URL has a fragment (#) with the session info.
-            // We need to redirect to the login page, preserving this fragment.
-            // The script on the login page will then handle the session, sign the user out,
-            // and display the success message.
-            // The redirect is immediate as this page's only job is to forward the user.
-            window.location.href = '/login' + window.location.hash;
+            // We show this page's success message for a few seconds, then redirect to the login page,
+            // preserving the URL fragment so the Supabase client on the login page can process it.
+            setTimeout(() => {
+                window.location.replace('/login' + window.location.hash);
+            }, 3000); // 3-second delay
         });
     </script>
 </body>
