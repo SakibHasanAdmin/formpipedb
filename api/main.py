@@ -1387,19 +1387,22 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
         if not db_check.data:
             raise HTTPException(status_code=404, detail="Database not found or access denied")
 
-        # Execute the query using a PostgreSQL function that returns JSON.
-        # This is safer than executing raw SQL directly in the API.
-        # We assume a function `execute_user_query` exists in the database.
-        # The function should handle execution and error trapping.
-        response = supabase.rpc('execute_user_query', {'query_text': query}).execute()
-        
-        result_data = response.data
-        
-        # The RPC function returns a single JSON object which might contain an error key.
-        if isinstance(result_data, dict) and 'error' in result_data:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query Error: {result_data['error']}")
+        # --- FIX: Execute the query using the PostgREST interface directly ---
+        # This avoids relying on a custom `execute_user_query` RPC function that may not exist.
+        # We construct the request manually to the PostgREST endpoint.
+        # The user's JWT is passed, so all queries are executed within their security context,
+        # respecting RLS policies on the underlying views.
+        postgrest_url = f"{SUPABASE_URL}/rest/v1/"
+        headers = {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": auth_details["client"].postgrest.auth_token,
+            "Accept": "application/json"
+        }
+        # The query is sent as a URL parameter.
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{postgrest_url}?select=*", params={"sql": query}, headers=headers)
+            result_data = response.json()
 
-        # If the query returns no rows, the result might be None or an empty list.
         if not result_data:
             return {"columns": [], "rows": []}
 
@@ -1407,7 +1410,10 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
         return {"columns": columns, "rows": result_data}
 
     except APIError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query execution failed: {e.message}")
+        # The httpx request won't raise an APIError, but we'll catch PostgREST's JSON error response.
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"Query execution failed: {result_data.get('message', 'Unknown error')}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query execution failed: {e.message}") # Keep for other potential API errors
     except HTTPException as e:
         raise e
     except Exception as e:
