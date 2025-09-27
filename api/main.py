@@ -1376,15 +1376,15 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
     """
     supabase = auth_details["client"]
 
-    # --- FIX: Make query parsing more robust by stripping comments ---
+    # --- FIX: Make query parsing more robust by stripping comments and preserving formatting ---
     # Remove multi-line /* ... */ comments first, then single-line -- comments.
     query_no_multiline_comments = re.sub(r'/\*.*?\*/', '', query_data.query, flags=re.DOTALL)
-    # Find the first non-empty line that doesn't start with a comment.
-    query_lines = [line for line in query_no_multiline_comments.split('\n') if line.strip() and not line.strip().startswith('--')] # pragma: no cover
-    original_query = "\n".join(query_lines).rstrip(';')
+    # Remove single-line comments.
+    query_no_single_line_comments = re.sub(r'--.*', '', query_no_multiline_comments)
+    original_query = query_no_single_line_comments.strip().rstrip(';')
 
     # Basic validation: only allow SELECT statements for security.
-    if not original_query.strip().upper().startswith("SELECT"):
+    if not original_query.upper().startswith("SELECT"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only SELECT queries are allowed.")
 
     # --- FIX: Automatically rewrite table names to their prefixed view names ---
@@ -1416,17 +1416,11 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
         # The user's JWT is passed, so all queries are executed within their security context,
         # respecting RLS policies on the underlying views.
         # We POST to a non-existent function name; PostgREST will execute the SQL from the body instead.
-
-        # --- FIX: Wrap the query in a transaction that sets the search_path ---
+        # --- FIX: Prepend SET LOCAL to the query to ensure views in the 'public' schema are found. ---
         # This ensures that the user's query can find the views (e.g., db_45_books)
-        # which are located in the 'public' schema. Without this, PostgreSQL might
-        # not know where to look, causing a "relation does not exist" error.
-        final_sql_payload = f"""
-        BEGIN;
-        SET LOCAL search_path = public, extensions;
-        {query};
-        COMMIT;
-        """
+        # which are located in the 'public' schema. PostgREST runs this in a transaction automatically,
+        # so `SET LOCAL` is safe and only affects this one query.
+        final_sql_payload = f"SET LOCAL search_path = public, extensions; {query};"
 
         postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/run_user_query"
         headers = {
