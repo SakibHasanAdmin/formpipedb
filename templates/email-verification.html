@@ -15,13 +15,11 @@
     <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md text-center">
         <div>
             <h1 class="text-3xl font-bold text-gray-900">Success!</h1>
-            <p class="mt-2 text-gray-600">Your email has been verified.</p>
+            <p id="message" class="mt-2 text-gray-600">Your email has been verified.</p>
             <p class="mt-4 text-sm text-gray-500">
                 You will be redirected shortly.
             </p>
-            <p class="mt-2 text-sm text-gray-500">
-                If you are not redirected, <a href="/login" class="font-medium text-blue-600 hover:text-blue-500">click here to log in</a>.
-            </p>
+            <a href="/login" class="mt-6 inline-block w-full py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all">Proceed to Log In</a>
         </div>
     </div>
 
@@ -34,7 +32,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             if (!supabaseUrl || !supabaseAnonKey) {
                 console.error("Supabase credentials missing.");
-                document.querySelector('.text-center p.mt-2').textContent = 'Configuration error. Cannot verify email.';
+                document.getElementById('message').textContent = 'Configuration error. Cannot verify email.';
                 return;
             }
 
@@ -44,16 +42,15 @@
             const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
 
             // The onAuthStateChange listener will fire with a 'SIGNED_IN' event once the token is processed.
-            // We need to catch this event, sign the user out immediately to prevent auto-login,
-            // and then redirect them to the login page.
+            // We catch this event and immediately sign the user out to prevent an active session from being created.
             supabase.auth.onAuthStateChange(async (event, session) => {
                 // This event fires when the token in the URL is processed.
                 if (event === 'SIGNED_IN' && !redirected) {
                     redirected = true; // Set the flag
 
                     // 1. The token has been processed and the email is verified.
-                    // 2. Immediately sign the user out. This is the crucial step to prevent
-                    //    the login page from detecting a session and auto-redirecting to /app.
+                    // 2. Immediately sign the user out. This is the crucial step to prevent the login page
+                    //    from detecting a session and auto-redirecting to the app dashboard.
                     await supabase.auth.signOut();
 
                     // 3. After a short delay to allow the user to read the success message,
