@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email Verified - FormPipeDB</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,13 +26,31 @@
     </div>
 
     <script>
+        const supabaseUrl = '{{ supabase_url }}';
+        const supabaseAnonKey = '{{ supabase_anon_key }}';
+
         document.addEventListener('DOMContentLoaded', () => {
-            // The user lands here from the email link. The URL has a fragment (#) with the session info.
-            // We show this page's success message for a few seconds, then redirect to the login page,
-            // preserving the URL fragment so the Supabase client on the login page can process it.
-            setTimeout(() => {
-                window.location.replace('/login' + window.location.hash);
-            }, 3000); // 3-second delay
+            if (!supabaseUrl || !supabaseAnonKey) {
+                console.error("Supabase credentials missing.");
+                document.querySelector('.text-center p.mt-2').textContent = 'Configuration error. Cannot verify email.';
+                return;
+            }
+
+            // Initialize Supabase client. This is CRUCIAL.
+            // The client will automatically detect the session token in the URL fragment (#)
+            // and handle the verification with Supabase in the background.
+            const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+            // The onAuthStateChange listener will fire once the token is processed.
+            // We don't need to do anything inside it; its presence is enough to trigger the verification.
+            // After showing the success message for a few seconds, we redirect to the login page.
+            supabase.auth.onAuthStateChange((event, session) => {
+                // This simply confirms the token was processed.
+                // Now we can safely redirect.
+                setTimeout(() => {
+                    window.location.replace('/login?verified=true');
+                }, 3000); // 3-second delay
+            });
         });
     </script>
 </body>

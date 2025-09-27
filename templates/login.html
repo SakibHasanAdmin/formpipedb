@@ -115,6 +115,13 @@
         const loader = document.getElementById('loader');
         const mainContent = document.getElementById('main-content');
 
+        // Check for a success message from the email verification redirect
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('verified') === 'true') {
+            successMessage.textContent = "Your email has been verified! You can now log in.";
+            // Clean the URL to avoid showing the message on refresh
+            window.history.replaceState({}, document.title, "/login");
+        }
         // --- FIX: Handle the email verification and existing session flow ---
         // This listener is key. It fires when the page loads and Supabase detects session
         // info in the URL fragment, which happens after a user clicks the verification link.
@@ -123,18 +130,18 @@
             // Supabase automatically processes the token from the URL fragment and fires a SIGNED_IN event.
             // We need to check if this is a new user who just verified their email.
             if (event === "SIGNED_IN" && session?.user?.user_metadata?.new_user) {
-                // 1. Show a clear success message on the login page.
-                successMessage.textContent = "Your email has been verified! You can now log in.";
-                
-                // 2. Immediately sign the user out. This is the crucial step.
-                // This invalidates the temporary session from the email link, forcing a manual login.
-                await supabase.auth.signOut();
- 
-                // 3. Update the user's metadata in the database to remove the 'new_user' flag.
-                // We use the original client to do this, as the user is now signed out.
-                // Note: This is an admin-level action that requires RLS to be configured to allow it.
-                // If this fails, it's not critical; the main goal is forcing the manual login.
-                await supabase.auth.updateUser({ data: { new_user: null } });
+                // 1. Update the user's metadata to remove the 'new_user' flag.
+                // This MUST be done first, while the user is still in a valid session.
+                const { error: updateError } = await supabase.auth.updateUser({ data: { new_user: null } });
+
+                if (updateError) {
+                    // If this fails, log it, but proceed to sign out anyway.
+                    console.error('Failed to update user metadata:', updateError.message);
+                }
+
+                // 2. Now, sign the user out. This invalidates the temporary session from the email link.
+                await supabase.auth.signOut(); // This will trigger another 'SIGNED_OUT' event.
+                // The 'else' block of this listener will then handle showing the login form.
  
                 // 4. Since we signed the user out, we now show the login form.
                 loader.style.display = 'none';
@@ -144,6 +151,7 @@
                 window.location.href = '/app';
             } else {
                 // If there's no session at all, just show the login form.
+                // This block now also handles the state after the user is signed out from verification.
                 loader.style.display = 'none';
                 mainContent.style.opacity = '1';
             }

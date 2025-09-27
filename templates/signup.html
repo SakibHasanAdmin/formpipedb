@@ -205,8 +205,8 @@
                         full_name: fullName,
                         new_user: true
                     },
-                    // Redirect to a dedicated verification page after the user clicks the link.
-                    emailRedirectTo: `${window.location.origin}/email-verification.html`
+                    // Use an absolute URL for emailRedirectTo to ensure it overrides any Supabase project-level Site URL settings.
+                    emailRedirectTo: `${window.location.origin}/email-verification`
                 }
             });
 
