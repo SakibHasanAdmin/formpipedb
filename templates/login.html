@@ -115,33 +115,37 @@
         const loader = document.getElementById('loader');
         const mainContent = document.getElementById('main-content');
 
-        // --- FIX: Handle the email verification flow ---
+        // --- FIX: Handle the email verification and existing session flow ---
         // This listener is key. It fires when the page loads and Supabase detects session
         // info in the URL fragment, which happens after a user clicks the verification link.
         supabase.auth.onAuthStateChange(async (event, session) => {
             // Check if this is the specific event for a new user verifying their email.
             if (event === "SIGNED_IN" && session?.user?.user_metadata?.new_user) {
-                // 1. Show a success message on the login page.
+                // 1. Show a clear success message on the login page.
                 successMessage.textContent = "Your email has been verified! You can now log in.";
                 
                 // 2. Immediately sign the user out. This is the crucial step.
                 // It invalidates the session token from the email link,
                 // preventing an automatic login and forcing a manual login.
                 await supabase.auth.signOut();
-
+ 
                 // 3. Update the user's metadata in the database to remove the 'new_user' flag.
                 // This is a 'nice-to-have' to clean up, but not critical for the flow.
                 // We can ignore errors here as the main flow is complete.
                 await supabase.auth.updateUser({ data: { new_user: null } });
-
+ 
+                // 4. Since we signed the user out, we now show the login form.
+                loader.style.display = 'none';
+                mainContent.style.opacity = '1';
+ 
             } else if (session) {
                 // If there's any other valid session, redirect to the app.
                 window.location.href = '/app';
+            } else {
+                // If there's no session at all, just show the login form.
+                loader.style.display = 'none';
+                mainContent.style.opacity = '1';
             }
-
-            // If there's no session, hide the loader and show the login form.
-            loader.style.display = 'none';
-            mainContent.style.opacity = '1';
         });
 
         const loginForm = document.getElementById('login-form');
