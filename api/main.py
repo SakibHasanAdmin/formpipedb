@@ -1393,20 +1393,21 @@ async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details
         if not db_check.data:
             raise HTTPException(status_code=404, detail="Database not found or access denied")
 
-        # --- FIX: Execute the query using the PostgREST interface directly ---
-        # This avoids relying on a custom `execute_user_query` RPC function that may not exist.
-        # We construct the request manually to the PostgREST endpoint.
+        # --- FIX: Execute the query using a POST request to a dummy RPC endpoint ---
+        # This is the correct way to run arbitrary read-only SQL via PostgREST.
         # The user's JWT is passed, so all queries are executed within their security context,
         # respecting RLS policies on the underlying views.
-        postgrest_url = f"{SUPABASE_URL}/rest/v1/"
+        # We POST to a non-existent function name; PostgREST will execute the SQL from the body instead.
+        postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/run_user_query"
         headers = {
             "apikey": SUPABASE_ANON_KEY,
             "Authorization": f"Bearer {auth_details['token']}",
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "Content-Type": "application/json"
         }
-        # The query is sent as a URL parameter.
+        # The query is sent in the request body.
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{postgrest_url}?select=*", params={"sql": query}, headers=headers)
+            response = await client.post(postgrest_url, headers=headers, json={"sql": query})
 
         # --- FIX: Add robust error handling for non-200 responses ---
         if response.status_code != 200:
