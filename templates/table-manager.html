@@ -749,16 +749,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         <option value="false" ${isFalse ? 'selected' : ''}>False</option>
                     `;
                     td.appendChild(select);
-                } else if (col.type === 'timestamp' || col.type === 'date') { // --- DATE/TIMESTAMP ---
+                } else if (col.type.toLowerCase() === 'date') { // --- DATE ---
                     const input = document.createElement('input');
                     input.type = 'date';
                     const dateValue = cellValue ? new Date(cellValue).toISOString().split('T')[0] : '';
                     input.value = dateValue;
+                    input.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 date-input';
+                    td.appendChild(input);
+                } else if (col.type.toLowerCase() === 'timestamp') { // --- TIMESTAMP ---
+                    const input = document.createElement('input');
+                    input.type = 'datetime-local';
+                    // Format to YYYY-MM-DDTHH:MI, which is what datetime-local expects
+                    const tsValue = cellValue ? new Date(cellValue).toISOString().slice(0, 16) : '';
+                    input.value = tsValue;
                     input.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 timestamp-input';
                     td.appendChild(input);
-                } else { // --- TEXT/NUMBER ---
+                }
+                else { // --- TEXT/NUMBER/JSON ---
                     const input = document.createElement('input');
-                    const inputType = (col.type === 'integer' || col.type === 'real') ? 'number' : 'text';
+                    const inputType = (col.type.toLowerCase() === 'integer' || col.type.toLowerCase() === 'real') ? 'number' : 'text';
                     input.type = inputType;
                     input.value = cellValue;
                     input.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 editable-cell-input';
@@ -1139,25 +1148,102 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /**
+     * Validates a row's data before saving.
+     * @param {HTMLElement} rowElement - The <tr> element containing the inputs.
+     * @param {Object} rowData - The key-value pairs of data from the inputs.
+     * @returns {Promise<string|null>} An error message string if validation fails, otherwise null.
+     */
+    async function validateRow(rowElement, rowData) {
+        const columns = state.selectedTable.columns;
+        const rowId = rowElement.dataset.rowId || null; // null for new rows
+
+        for (const col of columns) {
+            const value = rowData[col.name];
+
+            // 1. NOT NULL Check
+            if (col.is_not_null && (value === null || value === '')) {
+                // Skip for auto-incrementing primary keys on new rows
+                if (col.is_primary_key && col.is_auto_increment && !rowId) {
+                    continue;
+                }
+                return `Column '${col.name}' cannot be empty.`;
+            }
+
+            // 2. Data Type Check (for non-empty values)
+            if (value !== null && value !== '') {
+                if (col.type.toLowerCase() === 'integer' && !/^-?\d+$/.test(value)) {
+                    return `Column '${col.name}' must be a valid integer.`;
+                }
+                if (col.type.toLowerCase() === 'real' && isNaN(parseFloat(value))) {
+                    return `Column '${col.name}' must be a valid number (real).`;
+                }
+            }
+
+            // 3. UNIQUE Check (Client-side, requires an API call)
+            if (col.is_unique && value !== null && value !== '') {
+                try {
+                    // This check requires a backend endpoint. Assuming one exists at this path.
+                    // It checks if the value exists for the given column, excluding the current row's ID during an update.
+                    const checkUrl = `/api/v1/tables/${state.selectedTable.id}/check-unique?column=${encodeURIComponent(col.name)}&value=${encodeURIComponent(value)}&exclude_id=${rowId || ''}`;
+                    const response = await fetchWithAuth(checkUrl);
+                    
+                    // If the endpoint doesn't exist (404) or fails, we can't be sure.
+                    // We'll log a warning and let the backend's database constraint catch it.
+                    if (response.status === 404) {
+                        console.warn(`Uniqueness check endpoint not found for ${col.name}. Skipping client-side validation.`);
+                        continue;
+                    }
+                    if (!response.ok) {
+                        console.warn(`Could not perform uniqueness check for ${col.name}. The server will validate it.`);
+                        continue;
+                    }
+
+                    const result = await response.json();
+                    if (!result.is_unique) {
+                        return `Value '${value}' for column '${col.name}' already exists and must be unique.`;
+                    }
+                } catch (error) {
+                    console.error('Error during unique check:', error);
+                    // Don't block saving if the check itself fails; let the backend handle it.
+                }
+            }
+        }
+
+        return null; // All checks passed
+    }
+
     async function handleSaveRow(rowElement) {
         const isNew = rowElement.dataset.isNew === 'true';
         const rowId = rowElement.dataset.rowId;
 
         const rowData = {};
-        rowElement.querySelectorAll('td[data-column-name]').forEach(cell => {
+        for (const cell of rowElement.querySelectorAll('td[data-column-name]')) {
             const colName = cell.dataset.columnName;
             const input = cell.querySelector('input, select');
-            if (input) rowData[colName] = input.value;
-        });
+            if (input) {
+                // Format timestamp from 'YYYY-MM-DDTHH:MM' to 'YYYY-MM-DD HH:MM:SS' for SQL
+                if (input.type === 'datetime-local' && input.value) {
+                    rowData[colName] = input.value.replace('T', ' ') + ':00';
+                } else {
+                    rowData[colName] = input.value;
+                }
+            }
+        }
 
         const payload = { data: rowData };
         const url = isNew ? `/api/v1/tables/${state.selectedTable.id}/rows` : `/api/v1/rows/${rowId}`;
         const method = isNew ? 'POST' : 'PUT';
-
         const saveButton = rowElement.querySelector('.save-row-btn');
         saveButton.disabled = true;
 
         try {
+            // Perform validation before sending the request
+            const validationError = await validateRow(rowElement, rowData);
+            if (validationError) {
+                throw new Error(validationError);
+            }
+
             const response = await fetchWithAuth(url, {
                 method: method,
                 headers: { 'Content-Type': 'application/json' },
