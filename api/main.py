@@ -1427,8 +1427,15 @@ async def run_structured_query(
 
     # For demonstration, we'll build the SQL string to return to the user.
     # THIS IS FOR DISPLAY ONLY.
-    final_sql_string = f"SELECT {', '.join([f'\"{c}\"' for c in query_request.select_columns])}\nFROM \"{main_table.name}\"\nWHERE {' AND '.join([f'\"{c.column}\" {c.operator} \'{c.value}\'' for c in query_request.where_clauses])};"
-
+    select_str = f"SELECT {', '.join([f'\"{c}\"' for c in query_request.select_columns])}"
+    from_str = f"FROM \"{main_table.name}\""
+    where_str = ""
+    if query_request.where_clauses:
+        # Properly format values for display (e.g., wrap strings in quotes)
+        where_conditions_display = [f"\"{c.column}\" {c.operator} {f'\'{c.value}\'' if isinstance(c.value, str) else c.value}" for c in query_request.where_clauses]
+        where_str = f"WHERE {' AND '.join(where_conditions_display)}"
+    
+    final_sql_string = f"{select_str}\n{from_str}\n{where_str};"
     response = query.limit(500).execute() # Limit results to 500 for safety
 
     return {"data": response.data, "sql_query": final_sql_string}
