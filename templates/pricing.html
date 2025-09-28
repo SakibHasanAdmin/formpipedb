@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing - FormPipeDB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" href="/static/images/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style> 
+        body { font-family: 'Inter', sans-serif; } 
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 flex flex-col min-h-screen">
+
+    <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-sm border-b border-gray-200">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div>
+                <a href="/" class="text-2xl font-bold text-gray-900 hover:text-blue-600 transition-colors">FormPipeDB</a>
+            </div>
+            <div class="hidden md:flex items-center space-x-8">
+                <a href="/about" class="text-lg font-medium text-gray-600 hover:text-blue-600 transition-colors">About Us</a>
+                <a href="/contact" class="text-lg font-medium text-gray-600 hover:text-blue-600 transition-colors">Contact</a>
+            </div>
+            <div class="space-x-4">
+                <a href="/login" class="text-lg font-medium text-gray-600 hover:text-blue-600 transition-colors">Login</a>
+                <a href="/signup" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-lg font-medium hover:bg-blue-700 transition-all">Sign Up</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="flex-grow py-12 sm:py-20">
+        <div class="container mx-auto px-6 text-center">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900">Choose Your Plan</h1>
+            <p class="text-xl text-gray-600 mt-4 max-w-2xl mx-auto">Start for free and scale up as you grow. No hidden fees.</p>
+
+            <div class="mt-12 max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                <div class="bg-white p-8 rounded-xl shadow-md border">
+                    <h2 class="text-2xl font-bold">Free</h2>
+                    <p class="mt-4 text-4xl font-bold">$0<span class="text-lg font-medium text-gray-500"> / month</span></p>
+                    <p class="mt-2 text-gray-600">For individuals and small projects.</p>
+                    <ul class="mt-8 space-y-4 text-gray-700">
+                        <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>1 Database</li>
+                        <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Up to 3 Tables</li>
+                         <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>1,000 Rows per Table</li>
+                        <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Community Support</li>
+                    </ul>
+                    <a href="/signup" class="mt-8 block w-full text-center py-3 font-semibold text-blue-600 bg-white border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-all">Get Started</a>
+                </div>
+
+                <div class="bg-white p-8 rounded-xl shadow-lg border-2 border-blue-600 relative">
+                    <span class="absolute top-0 -translate-y-1/2 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</span>
+                    <h2 class="text-2xl font-bold">Pro</h2>
+                    <p class="mt-4 text-4xl font-bold">$10<span class="text-lg font-medium text-gray-500"> / month</span></p>
+                    <p class="mt-2 text-gray-600">For power users and businesses.</p>
+                    <ul class="mt-8 space-y-4 text-gray-700">
+                        <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited Databases</li>
+                        <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited Tables</li>
+                        <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>100,000 Rows per Table</li>
+                        <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>No-Code Query Builder</li>
+                        <li class="flex items-center"><svg class="w-6 h-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Priority Support</li>
+                    </ul>
+                    <button id="pro-checkout-btn" class="mt-8 block w-full text-center py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">Upgrade to Pro</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-900 text-white">
+        <div class="container mx-auto px-6 py-8">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-6 md:mb-0">
+                    <a href="/" class="text-2xl font-bold hover:text-gray-300">FormPipeDB</a>
+                    <p class="text-gray-400 mt-2">© 2025 FormPipeDB. All rights reserved.</p>
+                </div>
+                <div class="flex space-x-8">
+                    <a href="/about" class="text-md hover:text-gray-300">About</a>
+                    <a href="/contact" class="text-md hover:text-gray-300">Contact</a>
+                    <a href="/terms" class="text-md hover:text-gray-300">Terms</a>
+                    <a href="/privacy" class="text-md hover:text-gray-300">Privacy</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

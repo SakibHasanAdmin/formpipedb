@@ -1414,6 +1414,16 @@ async def login_page(request: Request):
         }
     )
 
+@app.get("/pricing", response_class=HTMLResponse)
+async def pricing_page(request: Request):
+    return templates.TemplateResponse(
+        "pricing.html", 
+        {
+            "request": request, 
+            "supabase_url": SUPABASE_URL, 
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        })
+
 @app.get("/forgot-password", response_class=HTMLResponse)
 async def forgot_password_page(request: Request):
     return templates.TemplateResponse(
