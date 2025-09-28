@@ -1423,19 +1423,20 @@ async def run_sql_query(
         # --- FIX: Execute the query using a POST request to a dummy RPC endpoint ---
         # This is the correct way to run arbitrary read-only SQL via PostgREST.
         # The user's JWT is passed, so all queries are executed within their security context,
-        # respecting RLS policies on the underlying views.
-        # We POST to a non-existent function name; PostgREST will execute the SQL from the body instead.
-        # --- FIX: Prepend SET LOCAL to the query to ensure views in the 'public' schema are found. ---
-        # This ensures that the user's query can find the views (e.g., db_45_books)
-        # which are located in the 'public' schema. PostgREST runs this in a transaction automatically,
-        # so `SET LOCAL` is safe and only affects this one query.
-        final_sql_payload = f"SET LOCAL search_path = public, extensions; {query};"
+        # respecting RLS policies on the underlying views. We POST to a non-existent function name;
+        # PostgREST will execute the SQL from the body instead.
+        
+        # --- FIX: Wrap the user's query in a CTE to bypass the 'must start with SELECT' issue ---
+        # The `run_user_query` RPC function in Supabase also checks if the query starts with SELECT.
+        # By prepending `SET LOCAL`, our previous query failed that check.
+        # Wrapping the user's query in a CTE `WITH ... SELECT` ensures the overall statement is a SELECT,
+        # while still allowing us to set the search_path for the transaction.
+        final_sql_payload = f"SET LOCAL search_path = public, extensions; WITH user_query AS ({query}) SELECT * FROM user_query;"
 
         postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/run_user_query"
         headers = {
             "apikey": SUPABASE_ANON_KEY,
             "Authorization": f"Bearer {auth_details['token']}",
-            "Accept": "application/json",
             "Content-Type": "application/json"
         }
         # The query is sent in the request body.
