@@ -10,20 +10,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Fira+Code&display=swap" rel="stylesheet">
 
-    <!-- CodeMirror for SQL Runner -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/dracula.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/sql/sql.min.js"></script>
-
     <!-- Highlight.js for static code views -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <style> 
         body { font-family: 'Inter', sans-serif; } 
-        /* CodeMirror Styles */
-        .CodeMirror { font-family: 'Fira Code', monospace; border: 1px solid #e5e7eb; border-radius: 0.375rem; height: 10rem; font-size: 0.875rem; }
         .modal { transition: opacity 0.3s ease-in-out; }
         #sidebar, #main-content { transition: all 0.3s ease-in-out; }
         .sidebar-item-title, .sidebar-header-text, #sidebar-footer-text { transition: opacity 0.2s, width 0.2s; }
@@ -60,7 +52,6 @@
         </nav>
         <div class="p-4 border-t space-y-2 overflow-hidden">
             <button id="create-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg><span class="sidebar-item-title">New Table</span></button>
-            <button id="sql-runner-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-gray-700 text-white hover:bg-gray-800 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><span class="sidebar-item-title">SQL Runner</span></button>
             <button id="view-db-sql-sidebar-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v5c0 2.21 3.582 4 8 4s8-1.79 8-4V7"></path></svg><span class="sidebar-item-title">View DB SQL</span></button>
             <button id="delete-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg><span class="sidebar-item-title">Delete Table</span></button>
         </div>
@@ -146,35 +137,6 @@
     <div id="placeholder-content" class="flex-1 flex items-center justify-center text-gray-500">
         Select a table to view its structure and data.
     </div>
-
-    <!-- SQL Runner Content -->
-    <div id="sql-runner-content" class="flex-1 p-4 sm:p-6 md:p-8 overflow-auto hidden flex flex-col">
-        <h2 class="text-2xl font-bold text-gray-800 mb-4">SQL Runner</h2>
-        <div class="flex flex-col space-y-4 flex-grow">
-            <!-- SQL Input Area -->
-            <div>
-                <label for="sql-query-input" class="block text-sm font-medium text-gray-700 mb-1">SQL Query (Read-Only)</label>
-                <textarea id="sql-query-input" placeholder="-- Enter your SELECT query here, e.g.,&#10;-- SELECT * FROM your_table_name WHERE id > 10;"></textarea>
-                <div class="mt-2 flex justify-end">
-                    <button id="run-sql-query-btn" class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 font-semibold flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Run Query
-                    </button>
-                </div>
-            </div>
-
-            <!-- Results Area -->
-            <div class="flex-grow flex flex-col">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Results</label>
-                <div id="sql-results-wrapper" class="flex-grow bg-white rounded-lg shadow-sm border overflow-auto relative min-h-[200px]">
-                    <div id="sql-results-placeholder" class="p-8 text-center text-gray-500">
-                        Query results will appear here.
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <div id="error-banner" class="hidden fixed top-5 right-5 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50" role="alert">
     <strong class="font-bold">Error: </strong>
@@ -364,8 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const tableList = document.getElementById('table-list');
     const mainContent = document.getElementById('main-content');
-    const dataTableWrapper = document.getElementById('data-table-wrapper');
-    const sqlRunnerContent = document.getElementById('sql-runner-content');
     const placeholderContent = document.getElementById('placeholder-content');
     const deleteTableBtn = document.getElementById('delete-table-btn');
     const tableTabButtons = document.querySelectorAll('.table-tab-btn');
@@ -414,24 +374,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSummaryModalBtn = document.getElementById('close-summary-modal-btn');
     const sidebar = document.getElementById('sidebar');
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
-    const sqlRunnerBtn = document.getElementById('sql-runner-btn');
-    const runSqlQueryBtn = document.getElementById('run-sql-query-btn');
     
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
     let initialDataLoaded = false;
-
-    // --- UI & Error Handling ---
-    
-    // Initialize CodeMirror for the SQL Runner
-    const sqlCodeEditor = CodeMirror.fromTextArea(document.getElementById('sql-query-input'), {
-        mode: 'text/x-sql',
-        theme: 'dracula',
-        lineNumbers: true,
-        lineWrapping: true,
-        autofocus: true,
-        extraKeys: {"Ctrl-Enter": () => runSqlQueryBtn.click()}
-    });
 
     function showError(message, error = null) {
         const banner = document.getElementById('error-banner');
@@ -627,7 +573,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show table view, hide others
             mainContent.classList.remove('hidden');
             placeholderContent.classList.add('hidden');
-            sqlRunnerContent.classList.add('hidden');
 
             // Await FK caching before rendering data to prevent race conditions.
             await cacheForeignKeyData(state.selectedTable);
@@ -1638,115 +1583,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Sidebar & Mobile responsiveness
     toggleSidebarBtn.addEventListener('click', toggleSidebar);
     tableList.addEventListener('click', handleTableSelect);
-    sqlRunnerBtn.addEventListener('click', () => {
-        // Show SQL runner, hide other main content areas
-        sqlRunnerContent.classList.remove('hidden');
-        mainContent.classList.add('hidden');
-        placeholderContent.classList.add('hidden');
-
-        // Deselect any active table in the sidebar for visual clarity
-        tableList.querySelectorAll('a').forEach(a => a.classList.remove('bg-blue-100', 'text-blue-700', 'font-semibold'));
-        state.selectedTable = null;
-        sqlCodeEditor.refresh(); // Refresh editor in case it was hidden
-    });
-
-    // SQL Runner
-    runSqlQueryBtn.addEventListener('click', async () => {
-        const query = sqlCodeEditor.getValue().trim();
-        if (!query) {
-            showError("Query cannot be empty.");
-            return;
-        }
-
-        runSqlQueryBtn.disabled = true;
-        runSqlQueryBtn.innerHTML = '<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Running...';
-
-        const resultsWrapper = document.getElementById('sql-results-wrapper');
-        resultsWrapper.innerHTML = `<div id="sql-results-placeholder" class="p-8 text-center text-gray-500">Executing query...</div>`;
-
-        try {
-            const response = await fetchWithAuth(`/api/v1/databases/${state.dbId}/query`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: query }),
-            });
-
-            if (!response.ok) {
-                throw new Error(await getErrorFromResponse(response));
-            }
-
-            const result = await response.json();
-            renderSqlResults(result);
-
-        } catch (error) {
-            resultsWrapper.innerHTML = `<div class="p-4 font-mono text-sm text-red-600 bg-red-50">${error.message}</div>`;
-        } finally {
-            runSqlQueryBtn.disabled = false;
-            runSqlQueryBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Run Query';
-        }
-    });
-
-    function renderSqlResults(result) {
-        const resultsWrapper = document.getElementById('sql-results-wrapper');
-        resultsWrapper.innerHTML = '';
-
-        if (!result || !result.rows || result.rows.length === 0) {
-            resultsWrapper.innerHTML = `<div id="sql-results-placeholder" class="p-8 text-center text-gray-500">Query executed successfully, but returned no rows.</div>`;
-            return;
-        }
-
-        const table = document.createElement('table');
-        table.className = 'min-w-full text-sm';
-
-        const thead = table.createTHead();
-        thead.className = 'bg-gray-50 sticky top-0';
-        const headerRow = thead.insertRow();
-        result.columns.forEach(colName => {
-            const th = document.createElement('th');
-            th.className = 'p-3 text-left font-semibold';
-            th.textContent = colName;
-            headerRow.appendChild(th);
-        });
-
-        const tbody = table.createTBody();
-        tbody.className = 'divide-y';
-        result.rows.forEach(rowData => {
-            const row = tbody.insertRow();
-            result.columns.forEach(colName => {
-                const cell = row.insertCell();
-                cell.className = 'p-3 font-mono align-top';
-                const value = rowData[colName];
-                cell.appendChild(renderSqlResultCell(value));
-            });
-        });
-
-        resultsWrapper.appendChild(table);
-    }
-
-    function renderSqlResultCell(value) {
-        const wrapper = document.createElement('div');
-
-        if (value === null || value === undefined) {
-            wrapper.innerHTML = `<span class="text-gray-400">NULL</span>`;
-            return wrapper;
-        }
-
-        if (typeof value === 'object') {
-            const jsonString = JSON.stringify(value, null, 2);
-            const summaryText = Array.isArray(value) ? `[Array(${value.length})]` : '{Object}';
-            
-            wrapper.innerHTML = `
-                <details class="text-xs">
-                    <summary class="cursor-pointer text-blue-600 hover:underline">${summaryText}</summary>
-                    <pre class="mt-1 p-2 bg-gray-100 rounded whitespace-pre-wrap">${jsonString}</pre>
-                </details>
-            `;
-            return wrapper;
-        }
-
-        wrapper.textContent = String(value);
-        return wrapper;
-    }
 
     createTableBtn.addEventListener('click', () => {
         resetCreateTableModal();

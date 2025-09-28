@@ -129,13 +129,6 @@ class PaginatedRowResponse(BaseModel):
     total: int
     data: List[RowResponse]
 
-class QueryRequest(BaseModel):
-    query: str
-
-class QueryResponse(BaseModel):
-    columns: List[str]
-    rows: List[Dict[str, Any]]
-
 class SqlImportRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
@@ -299,18 +292,6 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
         insert_response = supabase.table("user_tables").insert(new_table_data, returning="representation").execute()
         # The data is returned as a list, so we take the first element.
         created_table = insert_response.data[0]
-
-        # --- Automatically create a VIEW for this table ---
-        # This makes the table immediately queryable in the SQL Runner.
-        try:
-            supabase.rpc('create_or_replace_view_for_table', {
-                'p_table_id': created_table['id'], # The view name will be constructed inside the function
-                'p_table_name': created_table['name'],
-                'p_columns': created_table['columns']
-            }).execute()
-        except Exception as view_error:
-            # If view creation fails, we don't fail the whole request, but we should log it.
-            print(f"Warning: Could not create view for table {created_table['id']}: {view_error}")
 
         return created_table
     except APIError as e:
@@ -692,17 +673,6 @@ async def update_database_table(table_id: int, table_data: TableUpdate, auth_det
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found or access denied.")
         
         updated_table = response.data[0]
-
-        # --- FIX: Re-create the view to reflect the structure changes ---
-        # This is the missing piece. Without this, the SQL Runner's view becomes outdated.
-        try:
-            supabase.rpc('create_or_replace_view_for_table', {
-                'p_table_id': updated_table['id'], # The view name will be constructed inside the function
-                'p_table_name': updated_table['name'],
-                'p_columns': updated_table['columns']
-            }).execute()
-        except Exception as view_error:
-            print(f"Warning: Could not update view for table {updated_table['id']} after structure change: {view_error}")
 
         return updated_table
     except APIError as e:
@@ -1344,126 +1314,12 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
                 update_payload = TableUpdate(name=table_to_update.name, columns=table_to_update.columns)
                 await update_database_table(table_to_update.id, update_payload, auth_details)
 
-        # Pass 4: Insert all data
-        for statement in statements:
-            if statement.upper().startswith("INSERT INTO"):
-                await _parse_and_execute_insert(statement, created_tables_map, new_db_id, supabase, user)
-        
-        # --- FIX: After all tables and data are imported, create the views for the SQL runner ---
-        final_tables_res = await get_database_tables(new_db_id, auth_details)
-        for table in final_tables_res:
-            try:
-                supabase.rpc('create_or_replace_view_for_table', {
-                    'p_table_id': table['id'],
-                    'p_table_name': table['name'],
-                    'p_columns': table['columns']
-                }).execute()
-            except Exception as view_error:
-                print(f"Warning: Could not create view for imported table {table['id']} ({table['name']}): {view_error}")
-
         return db_response
     except Exception as e:
         # If any part of the process fails, roll back by deleting the created database.
         if new_db_id:
             await delete_user_database(new_db_id, auth_details)
         raise HTTPException(status_code=400, detail=f"Failed to import SQL script: {str(e)}. The new database has been rolled back.")
-
-@app.post("/api/v1/databases/{database_id}/query")
-async def run_sql_query(
-    database_id: int, 
-    query_data: QueryRequest, 
-    response: Response, # Add the Response object to the signature
-    auth_details: dict = Depends(get_current_user_details)
-):
-    """
-    Executes a read-only SQL query within the user's security context.
-    This is designed to work with the views created for each table.
-    """
-    supabase = auth_details["client"]
-
-    # --- FIX: Prevent aggressive caching by browsers or CDNs ---
-    # These headers instruct any intermediate cache to not store the response.
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-
-    # --- FIX: Make query parsing more robust by stripping comments and preserving formatting ---
-    # Remove multi-line /* ... */ comments first, then single-line -- comments.
-    query_no_multiline_comments = re.sub(r'/\*.*?\*/', '', query_data.query, flags=re.DOTALL)
-    # Remove single-line comments.
-    query_no_single_line_comments = re.sub(r'--.*', '', query_no_multiline_comments)
-    original_query = query_no_single_line_comments.strip().rstrip(';')
-
-    # Basic validation: only allow SELECT statements for security.
-    if not original_query.upper().startswith("SELECT"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only SELECT queries are allowed.")
-
-    # --- FIX: Automatically rewrite table names to their prefixed view names ---
-    # 1. Fetch all table names for the current database.
-    tables_res = supabase.table("user_tables").select("name").eq("database_id", database_id).execute()
-    if not tables_res.data:
-        # If there are no tables, we can just run the query as-is.
-        query = original_query
-    else:
-        # 2. Create a mapping from original table name to the prefixed view name.
-        table_names = [t['name'] for t in tables_res.data]
-        # Sort by length descending to replace longer names first (e.g., 'book_authors' before 'book').
-        table_names.sort(key=len, reverse=True)
-
-        # 3. Iteratively replace each table name in the query with its view name.
-        query = original_query
-        for name in table_names:
-            # Use a case-insensitive regex with word boundaries to avoid partial matches.
-            query = re.sub(r'\b' + re.escape(name) + r'\b', f'db_{database_id}_{name}', query, flags=re.IGNORECASE)
-
-    try:
-        # Verify user has access to the parent database first.
-        db_check = supabase.table("user_databases").select("id").eq("id", database_id).maybe_single().execute()
-        if not db_check.data:
-            raise HTTPException(status_code=404, detail="Database not found or access denied")
-
-        # --- FIX: Execute the query using a POST request to a dummy RPC endpoint ---
-        # This is the correct way to run arbitrary read-only SQL via PostgREST.
-        # The user's JWT is passed, so all queries are executed within their security context,
-        # respecting RLS policies on the underlying views.
-        # We POST to a non-existent function name; PostgREST will execute the SQL from the body instead.
-        # --- FIX: Prepend SET LOCAL to the query to ensure views in the 'public' schema are found. ---
-        # This ensures that the user's query can find the views (e.g., db_45_books)
-        # which are located in the 'public' schema. PostgREST runs this in a transaction automatically,
-        # so `SET LOCAL` is safe and only affects this one query.
-        final_sql_payload = f"SET LOCAL search_path = public, extensions; {query};"
-
-        postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/run_user_query"
-        headers = {
-            "apikey": SUPABASE_ANON_KEY,
-            "Authorization": f"Bearer {auth_details['token']}",
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-        }
-        # The query is sent in the request body.
-        async with httpx.AsyncClient() as client:
-            response = await client.post(postgrest_url, headers=headers, json={"sql": final_sql_payload})
-
-        # --- FIX: Add robust error handling for non-200 responses ---
-        if response.status_code != 200:
-            try:
-                error_data = response.json()
-                # Supabase errors have a 'message' key.
-                error_message = error_data.get('message', 'An unknown query error occurred.')
-            except Exception:
-                # If the response isn't JSON, use the raw text.
-                error_message = response.text
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query failed: {error_message}")
-
-        result_data = response.json()
-
-        if not result_data:
-            return {"columns": [], "rows": []}
-
-        columns = list(result_data[0].keys()) if result_data else []
-        return {"columns": columns, "rows": result_data}
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
 
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
