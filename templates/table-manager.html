@@ -74,7 +74,11 @@
         </div>
 
         <div id="structure-tab-content" class="table-tab-content hidden">
-            <div class="bg-white rounded-lg shadow-sm border overflow-hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Table Structure</h3>
+                <button id="add-column-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold">Add Column</button>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm border overflow-hidden mt-4">
                 <div class="overflow-x-auto">
                     <table class="min-w-full text-sm">
                         <thead class="bg-gray-50">
@@ -219,6 +223,41 @@
             <pre><code id="db-sql-code-content"></code></pre>
         </div>
     </div>
+</div>
+
+<div id="add-column-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
+    <form id="add-column-form" class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-semibold mb-6">Add New Column</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Column Name</label>
+                <input type="text" id="add-column-name" required class="mt-1 block w-full p-2 border rounded-md shadow-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Data Type</label>
+                <select id="add-column-type" class="mt-1 block w-full p-2 border rounded-md shadow-sm bg-white">
+                    <option value="text">TEXT</option>
+                    <option value="integer">INTEGER</option>
+                    <option value="date">DATE</option>
+                    <option value="real">REAL</option>
+                    <option value="boolean">BOOLEAN</option>
+                    <option value="timestamp">TIMESTAMP</option>
+                    <option value="jsonb">JSONB</option>
+                </select>
+            </div>
+            <fieldset class="space-y-2 pt-2">
+                <legend class="text-sm font-medium text-gray-700">Constraints</legend>
+                <div class="grid grid-cols-2 gap-4">
+                    <label class="flex items-center text-gray-400" title="Cannot add NOT NULL columns to existing tables."><input id="add-is-not-null" type="checkbox" class="h-4 w-4 rounded border-gray-300 mr-2" disabled> Not Null</label>
+                    <label class="flex items-center"><input id="add-is-unique" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"> Unique</label>
+                </div>
+            </fieldset>
+        </div>
+        <div class="mt-8 flex justify-end gap-4">
+            <button id="cancel-add-column-btn" type="button" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add Column</button>
+        </div>
+    </form>
 </div>
 
 <div id="edit-column-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
@@ -418,6 +457,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelDeleteTableBtn = document.getElementById('cancel-delete-table-btn');
     const confirmDeleteTableBtn = document.getElementById('confirm-delete-table-btn');
     const editColumnModal = document.getElementById('edit-column-modal');
+    const addColumnBtn = document.getElementById('add-column-btn');
+    const addColumnModal = document.getElementById('add-column-modal');
+    const addColumnForm = document.getElementById('add-column-form');
+    const cancelAddColumnBtn = document.getElementById('cancel-add-column-btn');
     const editColumnForm = document.getElementById('edit-column-form');
     const cancelEditColumnBtn = document.getElementById('cancel-edit-column-btn');
     const structureTbody = document.getElementById('structure-tbody');
@@ -1433,6 +1476,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function handleAddColumnSubmit(e) {
+        e.preventDefault();
+        const newColumn = {
+            name: document.getElementById('add-column-name').value.trim(),
+            type: document.getElementById('add-column-type').value,
+            is_not_null: false, // Per requirement, cannot be NOT NULL on creation
+            is_unique: document.getElementById('add-is-unique').checked,
+            is_primary_key: false,
+            is_auto_increment: false,
+            foreign_key: null
+        };
+
+        if (!newColumn.name) {
+            showError("Column name cannot be empty.");
+            return;
+        }
+
+        state.selectedTable.columns.push(newColumn);
+        if (await saveTableStructure()) closeModal(addColumnModal);
+    }
     // --- Full DB SQL View ---
 
     async function handleViewDbSql() {
@@ -1764,6 +1827,12 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelDeleteTableBtn.addEventListener('click', () => closeModal(deleteTableModal));
     confirmDeleteTableBtn.addEventListener('click', handleDeleteTable);
     
+    addColumnBtn.addEventListener('click', () => {
+        addColumnForm.reset();
+        openModal(addColumnModal);
+    });
+    addColumnForm.addEventListener('submit', handleAddColumnSubmit);
+    cancelAddColumnBtn.addEventListener('click', () => closeModal(addColumnModal));
     editColumnForm.addEventListener('submit', handleEditColumnSubmit);
     cancelEditColumnBtn.addEventListener('click', () => closeModal(editColumnModal));
 
