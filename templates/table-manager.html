@@ -1690,7 +1690,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const resultsWrapper = document.getElementById('sql-results-wrapper');
         resultsWrapper.innerHTML = '';
 
-        if (!result || result.rows.length === 0) {
+        if (!result || !result.rows || result.rows.length === 0) {
             resultsWrapper.innerHTML = `<div id="sql-results-placeholder" class="p-8 text-center text-gray-500">Query executed successfully, but returned no rows.</div>`;
             return;
         }

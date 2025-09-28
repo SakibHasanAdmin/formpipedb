@@ -1456,10 +1456,11 @@ async def run_sql_query(
 
         result_data = response.json()
 
-        if not result_data:
+        # The new function returns an empty list for no results, which is perfect.
+        if not result_data or not isinstance(result_data, list):
             return {"columns": [], "rows": []}
 
-        columns = list(result_data[0].keys()) if result_data else []
+        columns = list(result_data[0].keys()) if result_data and result_data[0] else []
         return {"columns": columns, "rows": result_data}
     except HTTPException as e:
         raise e
