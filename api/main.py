@@ -138,6 +138,17 @@ class SqlTableCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     script: str
 
+class QueryFilter(BaseModel):
+    column: str
+    operator: str
+    value: Any
+
+class QueryBuilderRequest(BaseModel):
+    table_id: int
+    columns: List[str]
+    filters: List[QueryFilter] = Field(default_factory=list)
+    # Future additions: joins, order_by, etc.
+
 # --- FIX: Conditionally use EmailStr to prevent crash if 'email-validator' is not installed ---
 try:
     from pydantic import EmailStr
@@ -946,6 +957,71 @@ async def get_single_row(row_id: int, auth_details: dict = Depends(get_current_u
         return response.data
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not fetch row: {str(e)}")
+
+@app.post("/api/v1/query-builder/fetch")
+async def fetch_with_query_builder(
+    query_request: QueryBuilderRequest,
+    auth_details: dict = Depends(get_current_user_details)
+):
+    """
+    Executes a safe, structured query based on selections from the visual query builder.
+    This does NOT execute raw SQL from the client.
+    """
+    supabase = auth_details["client"]
+    table_id = query_request.table_id
+
+    try:
+        # 1. Verify user has access to the table (implicitly done by RLS on table_rows)
+        # and get table schema for validation.
+        table_schema_dict = await get_single_table(table_id, auth_details)
+        table_schema = TableResponse(**table_schema_dict)
+        valid_columns = {col.name for col in table_schema.columns}
+
+        # 2. Validate requested columns and filters against the schema
+        if not all(c in valid_columns for c in query_request.columns if c != '*'):
+            raise HTTPException(status_code=400, detail="Invalid column requested.")
+        if not all(f.column in valid_columns for f in query_request.filters):
+            raise HTTPException(status_code=400, detail="Invalid column specified in filter.")
+
+        # 3. Build the query
+        # We only select the 'data' jsonb field and will process it later.
+        query = supabase.table("table_rows").select("data").eq("table_id", table_id)
+
+        # 4. Apply filters safely
+        for f in query_request.filters:
+            # Sanitize operator to prevent abuse
+            # Using PostgREST operators: https://postgrest.org/en/stable/api.html#operators
+            operator_map = {
+                '=': 'eq', '!=': 'neq', '>': 'gt', '<': 'lt', '>=': 'gte', '<=': 'lte',
+                'LIKE': 'ilike', 'NOT LIKE': 'not.ilike', 'IN': 'in'
+            }
+            if f.operator in operator_map:
+                # For LIKE, wrap value in wildcards
+                value = f"%{f.value}%" if 'LIKE' in f.operator else f.value
+                # For IN, the value should be a tuple of values
+                if f.operator == 'IN':
+                    value = tuple(v.strip() for v in f.value.split(','))
+                
+                # The format for filtering on a JSONB column is `data->>column_name`
+                query = query.filter(f"data->>{f.column}", operator_map[f.operator], value)
+            elif f.operator == 'IS NULL':
+                query = query.is_(f"data->>{f.column}", None)
+            elif f.operator == 'IS NOT NULL':
+                query = query.not_.is_(f"data->>{f.column}", None)
+
+        # Limit results for safety
+        response = query.limit(1000).execute()
+
+        # 5. Process results to select only the requested columns
+        if '*' in query_request.columns:
+            return [row['data'] for row in response.data]
+        else:
+            processed_data = []
+            for row in response.data:
+                processed_data.append({col: row['data'].get(col) for col in query_request.columns})
+            return processed_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
 
 async def _validate_row_data(
     supabase: Client,

@@ -42,6 +42,7 @@
         </div>
         <div class="p-4 border-b">
             <h2 class="sidebar-header-text text-lg font-semibold text-gray-700">Tables</h2>
+            <button id="query-builder-btn" class="w-full flex items-center justify-center gap-2 p-2 mt-2 rounded-md bg-green-600 text-white hover:bg-green-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg><span class="sidebar-item-title">Query Builder</span></button>
         </div>
         <nav id="table-list" class="flex-1 p-4 space-y-1 overflow-y-auto">
             <!-- Loading state -->
@@ -130,6 +131,73 @@
                 </table>
             </div>
             <div id="pagination-controls" class="mt-4 flex flex-col md:flex-row justify-between items-center text-sm text-gray-600 gap-2">
+            </div>
+        </div>
+    </main>
+
+    <main id="query-builder-content" class="flex-1 p-4 sm:p-6 md:p-8 overflow-auto hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Visual Query Builder</h2>
+        <div class="bg-white p-6 rounded-lg shadow-sm border space-y-6">
+            <!-- Builder UI -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- FROM Clause -->
+                <div class="space-y-2">
+                    <label class="font-semibold text-gray-700">FROM</label>
+                    <select id="query-from-table" class="w-full p-2 border rounded-md bg-white focus:ring-2 focus:ring-blue-500">
+                        <option value="">-- Select a table --</option>
+                    </select>
+                </div>
+                <!-- SELECT Clause -->
+                <div class="space-y-2">
+                    <label class="font-semibold text-gray-700">SELECT</label>
+                    <div id="query-select-columns" class="p-2 border rounded-md bg-white h-24 overflow-y-auto">
+                        <p class="text-gray-400 text-sm">Select a table to see columns</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WHERE Clause -->
+            <div class="space-y-3 border-t pt-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-semibold text-gray-700">WHERE <span class="text-sm font-normal text-gray-500">(Filters)</span></h3>
+                    <button id="query-add-filter-btn" class="text-sm bg-gray-200 px-3 py-1 rounded-md hover:bg-gray-300 font-semibold disabled:opacity-50" disabled>+ Add Filter</button>
+                </div>
+                <div id="query-filters-container" class="space-y-2">
+                    <!-- Filter rows will be injected here -->
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-6">
+                <div class="w-full sm:w-auto">
+                    <button id="query-fetch-data-btn" class="w-full bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50" disabled>Fetch Data</button>
+                </div>
+                <div class="w-full sm:w-auto">
+                    <button id="query-generate-sql-btn" class="w-full bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50" disabled>Generate SQL</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generated SQL Display -->
+        <div id="query-sql-display" class="mt-6 hidden">
+            <h3 class="text-lg font-semibold mb-2">Generated SQL Query</h3>
+            <div class="p-4 rounded-md font-mono text-sm ring-1 ring-gray-200 relative bg-[#282c34]">
+                <button id="query-copy-sql-btn" class="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-semibold py-1 px-2 rounded">Copy</button>
+                <pre><code id="query-sql-code" class="language-sql">-- SQL will be generated here...</code></pre>
+            </div>
+        </div>
+
+        <!-- Results Display -->
+        <div id="query-results-display" class="mt-6 hidden">
+            <h3 class="text-lg font-semibold mb-2">Results</h3>
+            <div id="query-results-table-wrapper" class="bg-white rounded-lg shadow-sm border overflow-auto max-h-[60vh] relative">
+                <div id="query-results-loader" class="hidden absolute inset-0 bg-white bg-opacity-75 z-10 flex items-center justify-center">
+                    <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </div>
+                <table class="min-w-full text-sm">
+                    <thead id="query-results-header" class="bg-gray-50 sticky top-0 z-10"></thead>
+                    <tbody id="query-results-tbody" class="divide-y"></tbody>
+                </table>
             </div>
         </div>
     </main>
@@ -327,7 +395,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // DOM Elements
     const tableList = document.getElementById('table-list');
-    const mainContent = document.getElementById('main-content');
+    const tableViewContent = document.getElementById('table-view-content');
+    const queryBuilderContent = document.getElementById('query-builder-content');
     const placeholderContent = document.getElementById('placeholder-content');
     const deleteTableBtn = document.getElementById('delete-table-btn');
     const tableTabButtons = document.querySelectorAll('.table-tab-btn');
@@ -375,6 +444,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const importSummaryModal = document.getElementById('import-summary-modal');
     const closeSummaryModalBtn = document.getElementById('close-summary-modal-btn');
     const sidebar = document.getElementById('sidebar');
+
+    // Query Builder elements
+    const queryFromTableSelect = document.getElementById('query-from-table');
+    const querySelectColumnsDiv = document.getElementById('query-select-columns');
+    const queryAddFilterBtn = document.getElementById('query-add-filter-btn');
+    const queryFiltersContainer = document.getElementById('query-filters-container');
+    const queryFetchDataBtn = document.getElementById('query-fetch-data-btn');
+    const queryGenerateSqlBtn = document.getElementById('query-generate-sql-btn');
+    const querySqlDisplay = document.getElementById('query-sql-display');
+    const querySqlCode = document.getElementById('query-sql-code');
+    const queryCopySqlBtn = document.getElementById('query-copy-sql-btn');
+    const queryResultsDisplay = document.getElementById('query-results-display');
+    const queryResultsLoader = document.getElementById('query-results-loader');
+    const queryResultsHeader = document.getElementById('query-results-header');
+    const queryResultsTbody = document.getElementById('query-results-tbody');
+    const queryBuilderBtn = document.getElementById('query-builder-btn');
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
     
     // Abort controller to cancel stale data fetch requests
@@ -572,8 +657,9 @@ document.addEventListener('DOMContentLoaded', () => {
             tableList.querySelectorAll('a').forEach(a => a.classList.remove('bg-blue-100', 'text-blue-700', 'font-semibold'));
             e.target.classList.add('bg-blue-100', 'text-blue-700', 'font-semibold');
             
-            // Show table view, hide others
-            mainContent.classList.remove('hidden');
+            // Show table view, hide other main content areas
+            tableViewContent.classList.remove('hidden');
+            queryBuilderContent.classList.add('hidden');
             placeholderContent.classList.add('hidden');
 
             // Await FK caching before rendering data to prevent race conditions.
@@ -1053,7 +1139,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorDetail);
             }
             closeModal(deleteTableModal);
-            mainContent.classList.add('hidden');
+            tableViewContent.classList.add('hidden');
             placeholderContent.classList.remove('hidden');
             tableTabContainer.classList.add('hidden');
             deleteTableBtn.disabled = true;
@@ -1590,6 +1676,8 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelCreateTableBtn.addEventListener('click', () => closeModal(createTableModal));
     
     deleteTableBtn.addEventListener('click', () => {
+        tableViewContent.classList.remove('hidden');
+        queryBuilderContent.classList.add('hidden');
         if (!state.selectedTable) return;
         modalTableName.textContent = state.selectedTable.name;
         openModal(deleteTableModal);
@@ -1599,6 +1687,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     editColumnForm.addEventListener('submit', handleEditColumnSubmit);
     cancelEditColumnBtn.addEventListener('click', () => closeModal(editColumnModal));
+
+    queryBuilderBtn.addEventListener('click', showQueryBuilder);
 
     // Structure Tab
     structureTbody.addEventListener('click', (e) => {
