@@ -1940,6 +1940,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .join('');
 
         // Update JOIN column dropdowns
+        let cumulativeColumnsByTable = {};
+        if (fromTableName && availableColumnsByTable[fromTableName]) {
+            cumulativeColumnsByTable[fromTableName] = availableColumnsByTable[fromTableName];
+        }
+
         joinContainers.forEach(joinDiv => {
             const leftColSelect = joinDiv.querySelector('.join-left-col-select');
             const rightColSelect = joinDiv.querySelector('.join-right-col-select');
@@ -1948,17 +1953,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentLeftVal = leftColSelect.value;
             const currentRightVal = rightColSelect.value;
 
-            // The left-side dropdown can select from any column available so far.
-            leftColSelect.innerHTML = `<option value="">-- Column --</option>${allColumnsOptions}`;
+            // The left-side dropdown can only select from columns that are already in scope.
+            const leftSideOptions = Object.entries(cumulativeColumnsByTable)
+                .map(([tableName, columns]) => columns.map(col => `<option value="${tableName}.${col}">"${tableName}"."${col}"</option>`).join(''))
+                .join('');
+            leftColSelect.innerHTML = `<option value="">-- Column --</option>${leftSideOptions}`;
             leftColSelect.value = currentLeftVal;
 
             // The right-side dropdown should only show columns from the table being joined in this specific row.
-            rightColSelect.innerHTML = '';
+            rightColSelect.innerHTML = '<option value="">-- Column --</option>';
             if (joinTableName && availableColumnsByTable[joinTableName]) {
                 const rightSideOptions = availableColumnsByTable[joinTableName]
                     .map(col => `<option value="${joinTableName}.${col}">"${joinTableName}"."${col}"</option>`).join('');
-                rightColSelect.innerHTML = `<option value="">-- Column --</option>${rightSideOptions}`;
+                rightColSelect.innerHTML += rightSideOptions;
                 rightColSelect.value = currentRightVal;
+                // Add the current join table's columns to the cumulative map for the *next* join.
+                cumulativeColumnsByTable[joinTableName] = availableColumnsByTable[joinTableName];
             }
         });
 
