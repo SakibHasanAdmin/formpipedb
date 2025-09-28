@@ -124,26 +124,22 @@
             window.history.replaceState({}, document.title, "/login");
         }
 
-        supabase.auth.onAuthStateChange((event, session) => {
+        // --- FIX: Use getSession() for a direct check instead of an event listener ---
+        // This is a more reliable way to check for an existing session on page load.
+        // It avoids race conditions and complex event handling for this simple check.
+        async function checkSessionAndShowPage() {
+            const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                // If a valid session exists, redirect to the application.
+                // If a valid session exists (from a previous "Remember me" login),
+                // redirect immediately to the application.
                 window.location.href = '/app';
             } else {
                 // If there is no session, hide the loader and show the login form.
                 loader.style.display = 'none';
                 mainContent.style.opacity = '1';
             }
-        });
-        // async function checkSessionAndShowPage() {
-        //     const { data: { session } } = await supabase.auth.getSession();
-        //     if (session) {
-        //         window.location.href = '/app';
-        //     } else {
-        //         loader.style.display = 'none';
-        //         mainContent.style.opacity = '1';
-        //     }
-        // }
-        // checkSessionAndShowPage();
+        }
+        checkSessionAndShowPage();
 
         const loginForm = document.getElementById('login-form');
         loginForm.addEventListener('submit', async (event) => {

@@ -21,21 +21,18 @@
     <header class="bg-white shadow-sm">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
-            <div class="flex items-center">
-                <a href="/subscription" id="subscription-status-banner" class="hidden items-center gap-2 text-sm font-semibold text-gray-600 hover:text-blue-600 mr-4 p-2 rounded-lg hover:bg-gray-100"></a>
-                <div class="relative">
-                    <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                        <!-- Initials will be inserted here by JS -->
-                    </button>
-                    <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-10">
-                        <div class="px-4 py-2 border-b">
-                            <p id="profile-name" class="text-sm font-medium text-gray-900 truncate">Loading...</p>
-                            <p id="profile-email" class="text-sm text-gray-500 truncate">...</p>
-                        </div>
-                        <div class="py-1">
-                            <a href="#" id="sign-out-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign Out</a>
-                            <a href="/confirm-delete" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50">Delete Account</a>
-                        </div>
+            <div class="relative">
+                <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <!-- Initials will be inserted here by JS -->
+                </button>
+                <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-10">
+                    <div class="px-4 py-2 border-b">
+                        <p id="profile-name" class="text-sm font-medium text-gray-900 truncate">Loading...</p>
+                        <p id="profile-email" class="text-sm text-gray-500 truncate">...</p>
+                    </div>
+                    <div class="py-1">
+                        <a href="#" id="sign-out-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign Out</a>
+                        <a href="/confirm-delete" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50">Delete Account</a>
                     </div>
                 </div>
             </div>
@@ -423,47 +420,28 @@
                 profileDropdown.classList.toggle('hidden');
             });
 
+
             signOutBtn.addEventListener('click', async () => {
                 await supabase.auth.signOut(); // This clears the session from storage
                 window.location.href = '/login';
             });
 
             // Initial Load
-            supabase.auth.onAuthStateChange(async (event, session) => {
+            supabase.auth.onAuthStateChange((event, session) => {
                 if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
                     if (session) {
                         const user = session.user;
                         const fullName = user.user_metadata?.full_name;
-
+                        
                         // Populate profile dropdown
                         document.getElementById('profile-btn').textContent = getInitials(fullName);
                         document.getElementById('profile-name').textContent = fullName || 'User';
                         document.getElementById('profile-email').textContent = user.email;
 
-                        // --- FIX: All app logic is now inside the authenticated session block ---
+                        // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
                         if (!initialDataLoaded) {
-                            // Fetch and display subscription status
-                            const subscriptionBanner = document.getElementById('subscription-status-banner');
-                            try {
-                                const subResponse = await fetchWithAuth('/api/v1/users/me/subscription');
-                                if (subResponse.ok) {
-                                    const sub = await subResponse.json();
-                                    subscriptionBanner.classList.remove('hidden');
-                                    subscriptionBanner.classList.add('flex');
-                                    if (sub.plan === 'pro') {
-                                        subscriptionBanner.innerHTML = `<span>Pro Plan</span>`;
-                                    } else {
-                                        subscriptionBanner.innerHTML = `<span>Free Plan - Upgrade</span>`;
-                                    }
-                                }
-                            } catch (error) {
-                                console.error("Could not fetch subscription status:", error);
-                            }
-
-                            // Fetch data now that we are authenticated.
                             fetchDatabases();
                         }
-
                     } else {
                         window.location.href = '/login';
                     }
