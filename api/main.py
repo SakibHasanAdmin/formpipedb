@@ -304,52 +304,12 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
         # The data is returned as a list, so we take the first element.
         created_table = insert_response.data[0]
 
-        # --- Automatically create a VIEW for this table ---
-        # This makes the table immediately queryable in the SQL Runner.
-        try:
-            supabase.rpc('create_or_replace_view_for_table', {
-                'p_table_id': created_table['id'],
-                'p_database_id': database_id,
-                'p_table_name': created_table['name']
-            }).execute()
-            # --- FIX: Notify PostgREST to reload its schema cache ---
-            # This is crucial to make the new view immediately available to the API.
-            # Without this, subsequent API calls might fail with a "table not found" error.
-            supabase.rpc('pgrst_reload_schema').execute()
-
-        except Exception as view_error:
-            # If view creation fails, we don't fail the whole request, but we should log it.
-            print(f"Warning: Could not create view for table {created_table['id']}: {view_error}")
-
         return created_table
     except APIError as e:
         # Check for a unique constraint violation on the table name for that database
         if "user_tables_database_id_name_key" in str(e):
                  raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A table with the name '{table_data.name}' already exists in this database.")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not create table: {str(e)}")
-
-@app.get("/api/v1/tables/{table_id}/status", status_code=status.HTTP_200_OK)
-async def get_table_status(table_id: int, auth_details: dict = Depends(get_current_user_details)):
-    """
-    Checks if a table's corresponding view is ready and queryable via PostgREST.
-    This is used for polling after table creation to avoid race conditions.
-    """
-    supabase = auth_details["client"]
-    view_name = f"user_table_view_{table_id}"
-    try:
-        # Perform a lightweight query against the view. If it succeeds, the view is ready.
-        # We use .limit(0) to fetch no data, just to check for the view's existence in the cache.
-        supabase.from_(view_name).select("id", count='exact').limit(0).execute()
-        return {"status": "ok", "message": "Table view is ready."}
-    except APIError as e:
-        # Specifically check for the "schema cache" error.
-        if e.code == "PGRST205":
-            # This is the expected "not ready yet" state.
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"View '{view_name}' not yet available in API schema cache.")
-        # For any other error, something is wrong.
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error checking table status: {e.message}")
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unexpected error checking table status: {str(e)}")
 
 @app.post("/api/v1/databases/by-name/{db_name}/tables", response_model=TableResponse, status_code=status.HTTP_201_CREATED)
 async def create_table_by_db_name(db_name: str, table_data: TableCreate, auth_details: dict = Depends(get_current_user_details)):
@@ -720,20 +680,6 @@ async def update_database_table(table_id: int, table_data: TableUpdate, auth_det
         
         updated_table = db_response.data[0]
 
-        # --- FIX: Re-create the view to reflect the structure changes ---
-        # This is the missing piece. Without this, the SQL Runner's view becomes outdated.
-        try:
-            supabase.rpc('create_or_replace_view_for_table', {
-                'p_table_id': updated_table['id'],
-                'p_database_id': updated_table['database_id'],
-                'p_table_name': updated_table['name']
-            }).execute()
-            # --- FIX: Notify PostgREST to reload its schema cache after updating the view ---
-            supabase.rpc('pgrst_reload_schema').execute()
-
-        except Exception as view_error:
-            print(f"Warning: Could not update view for table {updated_table['id']} after structure change: {view_error}")
-
         return updated_table
     except APIError as e:
         # Handle case where the new table name conflicts with an existing one in the same database.
@@ -806,23 +752,31 @@ async def get_table_rows(
     """
     supabase = auth_details["client"]
     try:
-        # --- FIX: Query the user-specific view, not the base table_rows ---
-        # The view `user_table_view_{id}` correctly projects the row's internal `id`
-        # as the user-defined primary key column. This is the correct source of truth.
-        view_name = f"user_table_view_{table_id}"
-        query = supabase.from_(view_name).select("*", count='exact')
+        # --- REFACTOR: Query the base table_rows directly to avoid view-related race conditions ---
+        # We select the internal id, created_at, and the data blob.
+        # The frontend will be responsible for unpacking the 'data' object.
+        query = supabase.table("table_rows").select("id, created_at, data", count='exact').eq("table_id", table_id)
 
         if search:
-            # The view exposes all columns as top-level, so we can search them directly.
-            # We need the schema to know which columns to search.
+            # To search the JSONB data, we need the column names from the table's schema.
             table_schema_dict = await get_single_table(table_id, auth_details)
             table_schema_obj = TableResponse(**table_schema_dict)
-            searchable_columns = [col.name for col in table_schema_obj.columns]
-            or_filter = ",".join([f'"{col}".ilike.%{search}%' for col in searchable_columns])
+            
+            # We only search columns that are text-like to avoid casting errors in the DB.
+            searchable_columns = [
+                col.name for col in table_schema_obj.columns 
+                if col.type in ['text', 'varchar'] # Add other text-like types if necessary
+            ]
+            
+            # Build a PostgREST 'or' filter for searching within the JSONB 'data' field.
+            # The format is `data->>column_name.ilike.%search_term%`
+            or_filter = ",".join([f'data->>{col}.ilike.%{search}%' for col in searchable_columns])
             query = query.or_(or_filter)
 
-        response = query.order("id").range(offset, offset + limit - 1).execute()
+        # Order by the internal 'id' for consistent pagination.
+        response = query.order("id", desc=False).range(offset, offset + limit - 1).execute()
 
+        # The response format is now List[RowResponse], which the frontend will handle.
         return {"total": response.count, "data": response.data or []}
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -835,10 +789,9 @@ async def get_all_table_rows(table_id: int, auth_details: dict = Depends(get_cur
     """
     try:
         supabase = auth_details["client"]
-        # --- FIX: Query the user-specific view to get all columns, including the projected PK ---
-        view_name = f"user_table_view_{table_id}"
-        # The view is protected by RLS on the underlying tables, so this is secure.
-        response = supabase.from_(view_name).select("*").order("id").execute()
+        # --- REFACTOR: Query the base table_rows directly. ---
+        # This is used for CSV export.
+        response = supabase.table("table_rows").select("id, created_at, data").eq("table_id", table_id).order("id").execute()
         
         return response.data
 
@@ -1176,21 +1129,20 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
         create_statement += "\n);\n\n"
         sql_script += create_statement
 
-        # --- FIX: Fetch rows from the user-specific view to get all columns correctly ---
-        view_name = f"user_table_view_{table.id}"
-        raw_rows_res = supabase.from_(view_name).select("*").order("id").execute()
+        # Fetch all rows for the table directly from table_rows.
+        raw_rows_res = supabase.table("table_rows").select("data").eq("table_id", table.id).order("id").execute()
 
         if raw_rows_res.data and isinstance(raw_rows_res.data, list):
             sql_script += f"-- Data for table: {table.name}\n"
             for row in raw_rows_res.data:
-                row_data = row
+                row_data = row.get('data')
                 if not row_data:
                     continue
 
                 pk_col = next((col for col in table.columns if col.is_primary_key), None)
                 # --- FIX: Treat 'serial' type as auto-incrementing as well ---
                 pk_is_auto_increment = (pk_col.is_auto_increment or (pk_col.type or '').lower() == 'serial') if pk_col else False
-                
+
                 columns_to_insert = [f'"{k}"' for k, v in row_data.items() if not (pk_is_auto_increment and k == pk_col.name)]
                 values_to_insert = []
                 for k, v in row_data.items():
@@ -1415,21 +1367,6 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
             if statement.upper().startswith("INSERT INTO"):
                 await _parse_and_execute_insert(statement, created_tables_map, new_db_id, supabase, user) # This is already async
         
-        # Pass 5: Create all views and then reload the schema ONCE.
-        final_tables_res = await get_database_tables(new_db_id, auth_details)
-        for table in final_tables_res:
-            try:
-                supabase.rpc('create_or_replace_view_for_table', {
-                    'p_table_id': table['id'],
-                    'p_database_id': new_db_id,
-                    'p_table_name': table['name'],
-                }).execute() # Create the view
-            except Exception as view_error:
-                print(f"Warning: Could not create view for imported table {table['id']} ({table['name']}): {view_error}")
-        
-        # Now, after all views are created, reload the schema cache a single time.
-        supabase.rpc('pgrst_reload_schema').execute()
-
         return db_response
     except Exception as e:
         # If any part of the process fails, roll back by deleting the created database.

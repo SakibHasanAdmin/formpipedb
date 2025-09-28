@@ -543,37 +543,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    async function pollForTableReady(tableId) {
-        const maxRetries = 15; // Increased patience for schema cache to update
-        const retryDelay = 1000; // ms
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                const response = await fetchWithAuth(`/api/v1/tables/${tableId}/status`);
-                // The updated endpoint returns 200 OK only when the view is truly ready.
-                // A 404 is the expected "not ready yet" status.
-                if (response.ok) {
-                    console.log(`Table ${tableId} is ready.`);
-                    return true; // Table is ready
-                } else if (response.status !== 404) {
-                    // If it's not a 404, it's an unexpected error, stop polling.
-                    throw new Error(await getErrorFromResponse(response));
-                }
-            } catch (error) {
-                console.warn(`Polling attempt ${attempt} failed, but will retry.`, error);
-            }
-            
-            if (attempt < maxRetries) {
-                console.log(`Attempt ${attempt}: Table ${tableId} not ready, retrying in ${retryDelay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
-            }
-        }
-
-        // If the loop finishes without success
-        showError(`Table ${tableId} did not become available in time. Please try refreshing the page.`);
-        return false;
-    }
-
     async function handleTableUpdate(updatedTable, response) {
         const tableIndex = state.tables.findIndex(t => t.id === updatedTable.id);
         if (tableIndex > -1) state.tables[tableIndex] = updatedTable;
@@ -767,10 +736,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const rows = result.data;
             state.pagination.totalRows = result.total;
 
-            // Programmatic DOM creation to avoid innerHTML and potential CSP issues
             thead.innerHTML = '';
             tbody.innerHTML = '';
             
+            // --- REFACTOR: The API now returns the raw `table_rows` structure. ---
+            // The `row` object is now `{ id: <internal_id>, data: { <user_columns> } }`.
+
             const headerRow = document.getElementById('data-table-header').insertRow();
             headerRow.innerHTML = '<th class="p-3 w-24">Actions</th>';
             columns.forEach(col => {
@@ -804,13 +775,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const tr = document.createElement('tr');
         if (isNew) {
             tr.dataset.isNew = 'true';
-            tr.classList.add('bg-yellow-50'); // Style for new, unsaved rows
+            tr.classList.add('bg-yellow-50');
         } else {
+            // The `row.id` is now the internal primary key of the `table_rows` table.
             tr.dataset.rowId = row.id;
         }
 
         const actionsTd = document.createElement('td');
         actionsTd.className = 'p-3 text-center flex items-center justify-center gap-3';
+        // The save/delete buttons will now use the internal `row.id`.
         actionsTd.innerHTML = `
             <button class="save-row-btn text-gray-400 hover:text-green-600" title="Save Row">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
@@ -826,7 +799,8 @@ document.addEventListener('DOMContentLoaded', () => {
             td.className = 'p-1';
             td.dataset.columnName = col.name;
 
-            const cellValue = isNew ? '' : (row[col.name] ?? '');
+            // --- REFACTOR: Get the value from the `data` JSONB object. ---
+            const cellValue = isNew ? '' : (row.data ? row.data[col.name] : '') ?? '';
 
             if (col.foreign_key) {
                 const fkInfo = col.foreign_key;
@@ -1166,22 +1140,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorDetail);
             }
             closeModal(createTableModal);
-
-            // Poll for the table's view to be ready before proceeding.
-            // This prevents race conditions where the UI tries to fetch data from a view
-            // that hasn't been created or recognized by PostgREST yet.
+ 
+            // No more polling needed! We can proceed directly.
             const newTable = await response.json();
-            const isReady = await pollForTableReady(newTable.id);
+            await fetchDbIdAndTables();
 
-            if (isReady) {
-                await fetchDbIdAndTables();
-                // Auto-select the newly created table
-                const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
-                if (newTableLink) {
-                    newTableLink.click();
-                }
-            } else {
-                await fetchDbIdAndTables();
+            // Auto-select the newly created table
+            const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
+            if (newTableLink) {
+                newTableLink.click();
             }
         } catch (error) {
             showError(error.message, error);
@@ -1259,16 +1226,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const rows = await response.json();
             if (rows.length === 0) {
                 // It's not an error if the table is empty, just inform the user.
-                const a = document.createElement('a'); // Create a dummy link to show browser's "no file" dialog
+                const a = document.createElement('a');
                 a.click();
                 return;
             }
 
             const columns = state.selectedTable.columns.map(c => c.name);
             const csvRows = [columns.join(',')];
+            // --- REFACTOR: Adapt to the new row structure for CSV export. ---
             rows.forEach(row => {
                 const values = columns.map(colName => {
-                    const value = row[colName] ?? ''; // Basic CSV escaping: wrap in quotes if it contains a comma or quote
+                    const value = row.data ? (row.data[colName] ?? '') : '';
                     const strValue = String(value);
                     if (strValue.includes(',') || strValue.includes('"')) {
                         return `"${strValue.replace(/"/g, '""')}"`;
