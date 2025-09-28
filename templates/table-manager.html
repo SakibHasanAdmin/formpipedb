@@ -53,7 +53,6 @@
         <div class="p-4 border-t space-y-2 overflow-hidden">
             <button id="create-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg><span class="sidebar-item-title">New Table</span></button>
             <button id="view-db-sql-sidebar-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v5c0 2.21 3.582 4 8 4s8-1.79 8-4V7"></path></svg><span class="sidebar-item-title">View DB SQL</span></button>
-            <button id="open-query-builder-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-teal-600 text-white hover:bg-teal-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z"></path></svg><span class="sidebar-item-title">Query Builder</span></button>
             <button id="delete-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg><span class="sidebar-item-title">Delete Table</span></button>
         </div>
         <div class="p-2 border-t">
@@ -299,195 +298,6 @@
     </div>
 </div>
 
-<div id="query-builder-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-        <div class="p-4 border-b flex justify-between items-center">
-            <h3 class="text-xl font-semibold">Query Builder</h3>
-            <button id="close-query-builder-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
-        </div>
-        <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
-            <!-- Builder Controls -->
-            <div class="w-full md:w-1/3 lg:w-1/4 p-4 border-b md:border-b-0 md:border-r bg-gray-50 overflow-y-auto">
-                <div class="space-y-4">
-                    <!-- FROM -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">FROM</label>
-                        <select id="qb-from-table" class="w-full p-2 border rounded-md bg-white text-sm">
-                            <option value="">-- Select a table --</option>
-                        </select>
-                    </div>
-                    <!-- JOINS -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">JOINS</label>
-                        <div id="qb-joins-container" class="space-y-2"></div>
-                        <button id="qb-add-join-btn" type="button" class="text-xs text-blue-600 hover:underline mt-2 font-semibold">+ Add Join</button>
-                    </div>
-                    <!-- WHERE -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">WHERE</label>
-                        <div id="qb-where-container" class="space-y-2"></div>
-                        <button id="qb-add-where-btn" type="button" class="text-xs text-blue-600 hover:underline mt-2 font-semibold">+ Add Condition</button>
-                    </div>
-                    <!-- SELECT -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">SELECT</label>
-                        <div id="qb-select-container" class="p-2 border rounded-md bg-white max-h-40 overflow-y-auto text-sm space-y-1">
-                            <!-- Column checkboxes will be injected here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Results -->
-            <div class="flex-1 p-4 flex flex-col overflow-auto">
-                <div class="flex justify-between items-center mb-4">
-                    <h4 class="text-lg font-semibold">Results</h4>
-                    <div class="flex gap-2">
-                        <button id="qb-run-query-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold" disabled>Run Query</button>
-                    </div>
-                </div>
-                <div id="qb-results-wrapper" class="bg-white rounded-lg shadow-sm border overflow-auto flex-1 relative">
-                    <div id="qb-results-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-500">
-                        Build and run a query to see results.
-                    </div>
-                    <table class="min-w-full text-sm hidden">
-                        <thead id="qb-results-header" class="bg-gray-50 sticky top-0 z-10"></thead>
-                        <tbody id="qb-results-tbody" class="divide-y"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div id="query-builder-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-        <div class="p-4 border-b flex justify-between items-center">
-            <h3 class="text-xl font-semibold">Query Builder</h3>
-            <button id="close-query-builder-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
-        </div>
-        <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
-            <!-- Builder Controls -->
-            <div class="w-full md:w-1/3 lg:w-1/4 p-4 border-b md:border-b-0 md:border-r bg-gray-50 overflow-y-auto">
-                <div class="space-y-4">
-                    <!-- FROM -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">FROM</label>
-                        <select id="qb-from-table" class="w-full p-2 border rounded-md bg-white text-sm">
-                            <option value="">-- Select a table --</option>
-                        </select>
-                    </div>
-                    <!-- JOINS -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">JOINS</label>
-                        <div id="qb-joins-container" class="space-y-2"></div>
-                        <button id="qb-add-join-btn" type="button" class="text-xs text-blue-600 hover:underline mt-2 font-semibold">+ Add Join</button>
-                    </div>
-                    <!-- WHERE -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">WHERE</label>
-                        <div id="qb-where-container" class="space-y-2"></div>
-                        <button id="qb-add-where-btn" type="button" class="text-xs text-blue-600 hover:underline mt-2 font-semibold">+ Add Condition</button>
-                    </div>
-                    <!-- SELECT -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">SELECT</label>
-                        <div id="qb-select-container" class="p-2 border rounded-md bg-white max-h-40 overflow-y-auto text-sm space-y-1">
-                            <!-- Column checkboxes will be injected here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Results -->
-            <div class="flex-1 p-4 flex flex-col overflow-auto">
-                <div class="flex justify-between items-center mb-4">
-                    <h4 class="text-lg font-semibold">Results</h4>
-                    <div class="flex gap-2">
-                        <button id="qb-run-query-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold" disabled>Run Query</button>
-                    </div>
-                </div>
-                <div id="qb-results-wrapper" class="bg-white rounded-lg shadow-sm border overflow-auto flex-1 relative">
-                    <div id="qb-results-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-500">
-                        Build and run a query to see results.
-                    </div>
-                    <table class="min-w-full text-sm hidden">
-                        <thead id="qb-results-header" class="bg-gray-50 sticky top-0 z-10"></thead>
-                        <tbody id="qb-results-tbody" class="divide-y"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    
-                <div class="p-4 border-t space-y-2 overflow-hidden"></div>
-            <button id="view-db-sql-sidebar-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v5c0 2.21 3.582 4 8 4s8-1.79 8-4V7"></path></svg><span class="sidebar-item-title">View DB SQL</span></button>
-            <button id="open-query-builder-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-teal-600 text-white hover:bg-teal-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z"></path></svg><span class="sidebar-item-title">Query Builder</span></button>
-            <button id="delete-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg><span class="sidebar-item-title">Delete Table</span></button>
-        </div>
-        <div class="p-2 border-t">
-            <button id="toggle-sidebar-btn" class="w-full flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800">
-
-    </div>
-</div>
-
-<div id="query-builder-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
-        <div class="p-4 border-b flex justify-between items-center">
-            <h3 class="text-xl font-semibold">Query Builder</h3>
-            <button id="close-query-builder-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
-        </div>
-        <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
-            <!-- Builder Controls -->
-            <div class="w-full md:w-1/3 lg:w-1/4 p-4 border-b md:border-b-0 md:border-r bg-gray-50 overflow-y-auto">
-                <div class="space-y-4">
-                    <!-- FROM -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">FROM</label>
-                        <select id="qb-from-table" class="w-full p-2 border rounded-md bg-white text-sm">
-                            <option value="">-- Select a table --</option>
-                        </select>
-                    </div>
-                    <!-- JOINS -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">JOINS</label>
-                        <div id="qb-joins-container" class="space-y-2"></div>
-                        <button id="qb-add-join-btn" type="button" class="text-xs text-blue-600 hover:underline mt-2 font-semibold">+ Add Join</button>
-                    </div>
-                    <!-- WHERE -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">WHERE</label>
-                        <div id="qb-where-container" class="space-y-2"></div>
-                        <button id="qb-add-where-btn" type="button" class="text-xs text-blue-600 hover:underline mt-2 font-semibold">+ Add Condition</button>
-                    </div>
-                    <!-- SELECT -->
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-1">SELECT</label>
-                        <div id="qb-select-container" class="p-2 border rounded-md bg-white max-h-40 overflow-y-auto text-sm space-y-1">
-                            <!-- Column checkboxes will be injected here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Results -->
-            <div class="flex-1 p-4 flex flex-col overflow-auto">
-                <div class="flex justify-between items-center mb-4">
-                    <h4 class="text-lg font-semibold">Results</h4>
-                    <div class="flex gap-2">
-                        <button id="qb-run-query-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold" disabled>Run Query</button>
-                    </div>
-                </div>
-                <div id="qb-results-wrapper" class="bg-white rounded-lg shadow-sm border overflow-auto flex-1 relative">
-                    <div id="qb-results-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-500">
-                        Build and run a query to see results.
-                    </div>
-                    <table class="min-w-full text-sm hidden">
-                        <thead id="qb-results-header" class="bg-gray-50 sticky top-0 z-10"></thead>
-                        <tbody id="qb-results-tbody" class="divide-y"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 <script>
 const supabaseUrl = '{{ supabase_url }}';
 const supabaseAnonKey = '{{ supabase_anon_key }}';
@@ -564,10 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSummaryModalBtn = document.getElementById('close-summary-modal-btn');
     const sidebar = document.getElementById('sidebar');
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
-    const openQueryBuilderBtn = document.getElementById('open-query-builder-btn'); // --- FIX: Duplicate ID ---
-    const queryBuilderModal = document.getElementById('query-builder-modal');
-    const closeQueryBuilderBtn = document.getElementById('close-query-builder-btn');
-
+    
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
     let initialDataLoaded = false;
@@ -651,6 +458,107 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Data Fetching and Rendering ---
+
+    /**
+     * Fetches the database ID and its tables. Includes a retry mechanism to handle
+     * potential database replication lag immediately after creation.
+     */
+    async function fetchDbIdAndTables() {
+        const maxRetries = 5;
+        const retryDelay = 750; // ms
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // Fetch the database and its tables in a single API call.
+                const dbResponse = await fetchWithAuth(`/api/v1/databases/by-name/${encodeURIComponent(state.dbName)}`);
+
+                if (dbResponse.status === 404 && attempt < maxRetries) {
+                    console.log(`Attempt ${attempt}: Database not found, retrying in ${retryDelay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    continue;
+                }
+
+                if (!dbResponse.ok) {
+                    throw new Error(await getErrorFromResponse(dbResponse));
+                }
+
+                const dbWithTables = await dbResponse.json();
+                if (!dbWithTables) throw new Error(`Database '${state.dbName}' could not be loaded.`);
+                
+                // The API response now includes the tables under the `user_tables` key.
+                state.dbId = dbWithTables.id;
+                state.tables = dbWithTables.user_tables || [];
+                renderTables(state.tables);
+                initialDataLoaded = true;
+                return; // Exit the function successfully.
+
+            } catch (error) {
+                // If it's the last attempt, show the error.
+                if (attempt === maxRetries) {
+                    showError(`Failed to load database after ${maxRetries} attempts: ${error.message}`, error);
+                }
+            }
+        }
+
+        // If the loop finishes without success, show a final error state in the UI.
+        if (!initialDataLoaded) {
+            tableList.innerHTML = `<p class="text-sm text-red-500 p-2">Error loading tables.</p>`;
+            createTableBtn.disabled = true;
+            createTableBtn.title = "Cannot create table: failed to load database details.";
+            placeholderContent.textContent = `Error: Could not load database '${state.dbName}'. It may not exist or you may not have access.`; // Allow a retry on the next auth event
+        }
+    }
+
+    function renderTables(tables) {
+        tableList.innerHTML = '';
+        if (tables.length === 0) {
+            tableList.innerHTML = `<p class="text-sm text-gray-500 p-2">No tables yet.</p>`;
+            return;
+        }
+        tables.forEach(table => {
+            const tableLink = document.createElement('a');
+            tableLink.href = '#';
+            tableLink.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-100';
+            tableLink.textContent = table.name;
+            tableLink.dataset.tableId = table.id;
+            tableList.appendChild(tableLink);
+        });
+    }
+
+    async function cacheForeignKeyData(table) {
+        if (!table || !table.columns) return;
+        
+        state.fkDataCache = {};
+
+        const fkColumns = table.columns.filter(c => c.foreign_key);
+        for (const col of fkColumns) {
+            const fkInfo = col.foreign_key;
+            const referencedTableId = fkInfo.table_id;
+
+            if (state.fkDataCache[referencedTableId]) continue;
+
+            try {
+                const response = await fetchWithAuth(`/api/v1/tables/${referencedTableId}/all-rows`);
+                if (!response.ok) throw new Error(`Failed to fetch data for FK table ${referencedTableId}`);
+                const rows = await response.json();
+                
+                const referencedTable = state.tables.find(t => t.id === referencedTableId);
+                if (!referencedTable) throw new Error(`Could not find metadata for referenced table ${referencedTableId}`);
+                
+                const pkColumn = referencedTable.columns.find(c => c.is_primary_key);
+                if (!pkColumn) throw new Error(`Referenced table ${referencedTableId} has no primary key.`);
+
+                state.fkDataCache[referencedTableId] = {
+                    rows: rows,
+                    pkColumn: pkColumn.name,
+                    displayColumn: fkInfo.column_name
+                };
+            } catch (error) {
+                console.error(`Error caching FK data for table ${referencedTableId}:`, error);
+                state.fkDataCache[referencedTableId] = { rows: [], error: error.message };
+            }
+        }
+    }
 
     async function handleTableSelect(e) {
         if (e.target.tagName === 'A') {
@@ -1814,226 +1722,6 @@ document.addEventListener('DOMContentLoaded', () => {
         validateCreateTableForm(); // Re-validate when a new column is added
     });
 
-    // --- Query Builder Logic ---
-    function initializeQueryBuilder() {
-        const fromTableSelect = document.getElementById('qb-from-table');
-        fromTableSelect.innerHTML = '<option value="">-- Select a table --</option>';
-        state.tables.forEach(table => {
-            fromTableSelect.innerHTML += `<option value="${table.name}">${table.name}</option>`;
-        });
-
-        document.getElementById('qb-joins-container').innerHTML = '';
-        document.getElementById('qb-where-container').innerHTML = '';
-        document.getElementById('qb-select-container').innerHTML = '';
-        document.getElementById('qb-run-query-btn').disabled = true;
-        
-        // Reset results
-        document.getElementById('qb-results-placeholder').classList.remove('hidden');
-        document.querySelector('#qb-results-wrapper table').classList.add('hidden');
-        document.getElementById('qb-results-header').innerHTML = '';
-        document.getElementById('qb-results-tbody').innerHTML = '';
-    }
-
-    function updateQbSelectableColumns() {
-        const fromTable = document.getElementById('qb-from-table').value;
-        const selectContainer = document.getElementById('qb-select-container');
-        selectContainer.innerHTML = '';
-
-        if (!fromTable) return;
-
-        const tablesInQuery = new Map();
-        tablesInQuery.set(fromTable, state.tables.find(t => t.name === fromTable));
-
-        document.querySelectorAll('.qb-join-row').forEach(row => {
-            const joinTable = row.querySelector('.qb-join-table').value;
-            if (joinTable) {
-                tablesInQuery.set(joinTable, state.tables.find(t => t.name === joinTable));
-            }
-        });
-
-        tablesInQuery.forEach((table, tableName) => {
-            if (!table) return;
-            table.columns.forEach(col => {
-                const colIdentifier = `${tableName}.${col.name}`;
-                selectContainer.innerHTML += `
-                    <label class="flex items-center">
-                        <input type="checkbox" class="qb-select-col h-4 w-4 rounded mr-2" value="${colIdentifier}" checked>
-                        ${colIdentifier}
-                    </label>
-                `;
-            });
-        });
-    }
-
-    function addJoinRow() {
-        const container = document.getElementById('qb-joins-container');
-        const div = document.createElement('div');
-        div.className = 'qb-join-row grid grid-cols-1 gap-1 p-2 border rounded-md bg-gray-100';
-        
-        const tableOptions = state.tables.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-
-        div.innerHTML = `
-            <div class="flex items-center gap-1">
-                <select class="qb-join-type p-1 text-xs border rounded-md w-1/3">
-                    <option>INNER</option><option>LEFT</option>
-                </select>
-                <select class="qb-join-table p-1 text-xs border rounded-md w-2/3">
-                    <option value="">-- Join Table --</option>${tableOptions}
-                </select>
-                <button type="button" class="qb-remove-row-btn text-red-500 hover:text-red-700 text-xs">&times;</button>
-            </div>
-            <div class="flex items-center gap-1 text-xs">
-                <span class="font-bold">ON</span>
-                <select class="qb-join-col-from p-1 text-xs border rounded-md flex-1" disabled><option>-- col --</option></select>
-                <span>=</span>
-                <select class="qb-join-col-to p-1 text-xs border rounded-md flex-1" disabled><option>-- col --</option></select>
-            </div>
-        `;
-        container.appendChild(div);
-    }
-
-    function addWhereRow() {
-        const container = document.getElementById('qb-where-container');
-        const div = document.createElement('div');
-        div.className = 'qb-where-row grid grid-cols-12 gap-1 items-center';
-        div.innerHTML = `
-            <select class="qb-where-col col-span-5 p-1 text-xs border rounded-md" disabled><option>-- col --</option></select>
-            <select class="qb-where-op col-span-3 p-1 text-xs border rounded-md">
-                <option>=</option><option>!=</option><option>&gt;</option><option>&lt;</option><option>&gt;=</option><option>&lt;=</option><option>LIKE</option>
-            </select>
-            <input type="text" class="qb-where-val col-span-3 p-1 text-xs border rounded-md" placeholder="value">
-            <button type="button" class="qb-remove-row-btn text-red-500 hover:text-red-700 text-xs col-span-1">&times;</button>
-        `;
-        container.appendChild(div);
-        updateQbWhereColumnOptions();
-    }
-
-    function updateQbWhereColumnOptions() {
-        const fromTable = document.getElementById('qb-from-table').value;
-        if (!fromTable) return;
-
-        const tablesInQuery = new Map();
-        tablesInQuery.set(fromTable, state.tables.find(t => t.name === fromTable));
-        document.querySelectorAll('.qb-join-row').forEach(row => {
-            const joinTable = row.querySelector('.qb-join-table').value;
-            if (joinTable) tablesInQuery.set(joinTable, state.tables.find(t => t.name === joinTable));
-        });
-
-        let colOptions = '';
-        tablesInQuery.forEach((table, tableName) => {
-            if (!table) return;
-            table.columns.forEach(col => {
-                colOptions += `<option value="${tableName}.${col.name}">${tableName}.${col.name}</option>`;
-            });
-        });
-
-        document.querySelectorAll('.qb-where-col').forEach(select => {
-            const currentVal = select.value;
-            select.innerHTML = `<option value="">-- col --</option>${colOptions}`;
-            select.value = currentVal;
-            select.disabled = false;
-        });
-    }
-
-    async function runQueryBuilderQuery() {
-        const runBtn = document.getElementById('qb-run-query-btn');
-        runBtn.disabled = true;
-        runBtn.textContent = 'Running...';
-
-        const fromTable = document.getElementById('qb-from-table').value;
-        const selectedCols = Array.from(document.querySelectorAll('.qb-select-col:checked')).map(cb => cb.value);
-
-        const joins = Array.from(document.querySelectorAll('.qb-join-row')).map(row => ({
-            type: row.querySelector('.qb-join-type').value,
-            target_table_name: row.querySelector('.qb-join-table').value,
-            on_column_from: row.querySelector('.qb-join-col-from').value,
-            on_column_to: row.querySelector('.qb-join-col-to').value,
-        }));
-
-        const whereConditions = Array.from(document.querySelectorAll('.qb-where-row')).map(row => ({
-            column: row.querySelector('.qb-where-col').value,
-            operator: row.querySelector('.qb-where-op').value,
-            value: row.querySelector('.qb-where-val').value,
-        })).filter(w => w.column && w.value);
-
-        if (!fromTable || selectedCols.length === 0) {
-            showError("You must select a 'FROM' table and at least one 'SELECT' column.");
-            runBtn.disabled = false;
-            runBtn.textContent = 'Run Query';
-            return;
-        }
-
-        const payload = {
-            from_table: fromTable,
-            select_columns: selectedCols,
-            joins: joins.filter(j => j.target_table_name && j.on_column_from && j.on_column_to),
-            where_conditions: whereConditions,
-            db_name: state.dbName
-        };
-
-        try {
-            const response = await fetchWithAuth('/api/v1/query-builder/execute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) throw new Error(await getErrorFromResponse(response));
-
-            const results = await response.json();
-            renderQueryBuilderResults(results);
-
-        } catch (error) {
-            showError(`Query failed: ${error.message}`, error);
-            // Clear results on error
-            document.getElementById('qb-results-placeholder').classList.remove('hidden');
-            document.querySelector('#qb-results-wrapper table').classList.add('hidden');
-            document.getElementById('qb-results-header').innerHTML = '';
-            document.getElementById('qb-results-tbody').innerHTML = '';
-        } finally {
-            runBtn.disabled = false;
-            runBtn.textContent = 'Run Query';
-        }
-    }
-
-    function renderQueryBuilderResults(results) {
-        const placeholder = document.getElementById('qb-results-placeholder');
-        const table = document.querySelector('#qb-results-wrapper table');
-        const thead = document.getElementById('qb-results-header');
-        const tbody = document.getElementById('qb-results-tbody');
-
-        thead.innerHTML = '';
-        tbody.innerHTML = '';
-
-        if (!results || results.length === 0) {
-            placeholder.textContent = 'Query ran successfully, but returned no results.';
-            placeholder.classList.remove('hidden');
-            table.classList.add('hidden');
-            return;
-        }
-
-        placeholder.classList.add('hidden');
-        table.classList.remove('hidden');
-
-        const headers = Object.keys(results[0]);
-        const headerRow = thead.insertRow();
-        headers.forEach(h => {
-            const th = document.createElement('th');
-            th.className = 'p-3 text-left font-semibold';
-            th.textContent = h;
-            headerRow.appendChild(th);
-        });
-
-        results.forEach(row => {
-            const tr = tbody.insertRow();
-            headers.forEach(h => {
-                const td = tr.insertCell();
-                td.className = 'p-3';
-                td.textContent = row[h];
-            });
-        });
-    }
-
     // --- App Initialization ---
     
     // Check for saved sidebar state on load
@@ -2056,107 +1744,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
-
-    /**
-     * Fetches the database ID and its tables. Includes a retry mechanism to handle
-     * potential database replication lag immediately after creation.
-     */
-    async function fetchDbIdAndTables() {
-        const maxRetries = 5;
-        const retryDelay = 750; // ms
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                // Fetch the database and its tables in a single API call.
-                const dbResponse = await fetchWithAuth(`/api/v1/databases/by-name/${encodeURIComponent(state.dbName)}`);
-
-                if (dbResponse.status === 404 && attempt < maxRetries) {
-                    console.log(`Attempt ${attempt}: Database not found, retrying in ${retryDelay}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, retryDelay));
-                    continue;
-                }
-
-                if (!dbResponse.ok) {
-                    throw new Error(await getErrorFromResponse(dbResponse));
-                }
-
-                const dbWithTables = await dbResponse.json();
-                if (!dbWithTables) throw new Error(`Database '${state.dbName}' could not be loaded.`);
-                
-                // The API response now includes the tables under the `user_tables` key.
-                state.dbId = dbWithTables.id;
-                state.tables = dbWithTables.user_tables || [];
-                renderTables(state.tables);
-                initialDataLoaded = true;
-                return; // Exit the function successfully.
-
-            } catch (error) {
-                // If it's the last attempt, show the error.
-                if (attempt === maxRetries) {
-                    showError(`Failed to load database after ${maxRetries} attempts: ${error.message}`, error);
-                }
-            }
-        }
-
-        // If the loop finishes without success, show a final error state in the UI.
-        if (!initialDataLoaded) {
-            tableList.innerHTML = `<p class="text-sm text-red-500 p-2">Error loading tables.</p>`;
-            createTableBtn.disabled = true;
-            createTableBtn.title = "Cannot create table: failed to load database details.";
-            placeholderContent.textContent = `Error: Could not load database '${state.dbName}'. It may not exist or you may not have access.`; // Allow a retry on the next auth event
-        }
-    }
-
-    function renderTables(tables) {
-        tableList.innerHTML = '';
-        if (tables.length === 0) {
-            tableList.innerHTML = `<p class="text-sm text-gray-500 p-2">No tables yet.</p>`;
-            return;
-        }
-        tables.forEach(table => {
-            const tableLink = document.createElement('a');
-            tableLink.href = '#';
-            tableLink.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-100';
-            tableLink.textContent = table.name;
-            tableLink.dataset.tableId = table.id;
-            tableList.appendChild(tableLink);
-        });
-    }
-
-    async function cacheForeignKeyData(table) {
-        if (!table || !table.columns) return;
-        
-        state.fkDataCache = {};
-
-        const fkColumns = table.columns.filter(c => c.foreign_key);
-        for (const col of fkColumns) {
-            const fkInfo = col.foreign_key;
-            const referencedTableId = fkInfo.table_id;
-
-            if (state.fkDataCache[referencedTableId]) continue;
-
-            try {
-                const response = await fetchWithAuth(`/api/v1/tables/${referencedTableId}/all-rows`);
-                if (!response.ok) throw new Error(`Failed to fetch data for FK table ${referencedTableId}`);
-                const rows = await response.json();
-                
-                const referencedTable = state.tables.find(t => t.id === referencedTableId);
-                if (!referencedTable) throw new Error(`Could not find metadata for referenced table ${referencedTableId}`);
-                
-                const pkColumn = referencedTable.columns.find(c => c.is_primary_key);
-                if (!pkColumn) throw new Error(`Referenced table ${referencedTableId} has no primary key.`);
-
-                state.fkDataCache[referencedTableId] = {
-                    rows: rows,
-                    pkColumn: pkColumn.name,
-                    displayColumn: fkInfo.column_name
-                };
-            } catch (error) {
-                console.error(`Error caching FK data for table ${referencedTableId}:`, error);
-                state.fkDataCache[referencedTableId] = { rows: [], error: error.message };
-            }
-        }
-    }
 </script>
 
 </body>
