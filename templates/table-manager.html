@@ -2067,45 +2067,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     document.getElementById('generate-sql-btn').addEventListener('click', () => {
-        const fromTable = document.getElementById('from-table-select').value;
-        if (!fromTable) {
+        const fromTableName = document.getElementById('from-table-select').value;
+        if (!fromTableName) {
             showError("You must select a table in the 'FROM' clause.");
             return;
         }
 
+        // --- FIX: Implement table aliasing for correct JOIN and SELECT clauses ---
+        const tableAliases = new Map();
+        let aliasCounter = 1;
+
+        // Assign alias to the FROM table
+        tableAliases.set(fromTableName, `t${aliasCounter++}`);
+
+        // Assign aliases to JOIN tables
+        document.querySelectorAll('.join-condition').forEach(div => {
+            const joinTableName = div.querySelector('.join-table-select').value;
+            if (joinTableName && !tableAliases.has(joinTableName)) {
+                tableAliases.set(joinTableName, `t${aliasCounter++}`);
+            }
+        });
+
         // 1. Collect SELECT columns
         const selectedCols = [];
         document.querySelectorAll('#select-columns-container input:checked').forEach(cb => {
-            selectedCols.push(`"${cb.dataset.table}"."${cb.dataset.column}"`); // Use standard SQL quotes
+            const alias = tableAliases.get(cb.dataset.table);
+            if (alias) {
+                selectedCols.push(`${alias}."${cb.dataset.column}"`);
+            }
         });
         const selectClause = selectedCols.length > 0 ? selectedCols.join(',\n  ') : '*';
 
         // 2. Collect JOIN clauses
         const joinClauses = [];
-        document.querySelectorAll('.join-condition').forEach(div => {
-            const joinTable = div.querySelector('.join-table-select').value;
+        document.querySelectorAll('.join-condition').forEach((div, index) => {
+            const joinTableName = div.querySelector('.join-table-select').value;
             const [leftTable, leftCol] = (div.querySelector('.join-left-col-select').value || '').split('.');
             const [rightTable, rightCol] = (div.querySelector('.join-right-col-select').value || '').split('.');
-            if (joinTable && leftTable && leftCol && rightTable && rightCol) {
-                joinClauses.push(`INNER JOIN "${joinTable}" ON "${leftTable}"."${leftCol}" = "${rightTable}"."${rightCol}"`);
+
+            const joinAlias = tableAliases.get(joinTableName);
+            const leftAlias = tableAliases.get(leftTable);
+
+            if (joinAlias && leftAlias && leftCol && rightTable && rightCol) {
+                // The right table in the ON clause is always the table being joined in this step.
+                const rightAlias = tableAliases.get(rightTable);
+                joinClauses.push(`INNER JOIN "${joinTableName}" AS ${joinAlias} ON ${leftAlias}."${leftCol}" = ${rightAlias}."${rightCol}"`);
             }
         });
 
         // 3. Collect WHERE clauses
         const whereClauses = [];
         document.querySelectorAll('.where-condition').forEach(div => {
-            const [table, column] = (div.querySelector('.where-column-select').value || '').split('.');
+            const [tableName, column] = (div.querySelector('.where-column-select').value || '').split('.');
             const operator = div.querySelector('.where-operator-select').value;
             const value = div.querySelector('.where-value-input').value;
-            if (table && column && operator) {
+            const alias = tableAliases.get(tableName);
+
+            if (alias && column && operator) {
                 // Basic SQL injection prevention for strings by escaping single quotes.
                 const formattedValue = (operator.toUpperCase() === 'LIKE') ? `'%${value.replace(/'/g, "''")}%'` : `'${value.replace(/'/g, "''")}'`;
-                whereClauses.push(`"${table}"."${column}" ${operator} ${formattedValue}`);
+                whereClauses.push(`${alias}."${column}" ${operator} ${formattedValue}`);
             }
         });
 
         // 4. Combine and Display
-        let sql = `SELECT\n  ${selectClause}\nFROM\n  "${fromTable}"`;
+        const fromAlias = tableAliases.get(fromTableName);
+        let sql = `SELECT\n  ${selectClause}\nFROM\n  "${fromTableName}" AS ${fromAlias}`;
         if (joinClauses.length > 0) sql += `\n${joinClauses.join('\n')}`;
         if (whereClauses.length > 0) sql += `\nWHERE\n  ` + whereClauses.join(' AND\n  ');
         sql += ';';
