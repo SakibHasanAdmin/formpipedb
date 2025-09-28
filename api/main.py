@@ -129,6 +129,13 @@ class PaginatedRowResponse(BaseModel):
     total: int
     data: List[RowResponse]
 
+class QueryRequest(BaseModel):
+    query: str
+
+class QueryResponse(BaseModel):
+    columns: List[str]
+    rows: List[Dict[str, Any]]
+
 class SqlImportRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
@@ -137,17 +144,6 @@ class SqlImportRequest(BaseModel):
 class SqlTableCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     script: str
-
-class QueryFilter(BaseModel):
-    column: str
-    operator: str
-    value: Any
-
-class QueryBuilderRequest(BaseModel):
-    table_id: int
-    columns: List[str]
-    filters: List[QueryFilter] = Field(default_factory=list)
-    # Future additions: joins, order_by, etc.
 
 # --- FIX: Conditionally use EmailStr to prevent crash if 'email-validator' is not installed ---
 try:
@@ -304,6 +300,18 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
         # The data is returned as a list, so we take the first element.
         created_table = insert_response.data[0]
 
+        # --- Automatically create a VIEW for this table ---
+        # This makes the table immediately queryable in the SQL Runner.
+        try:
+            supabase.rpc('create_or_replace_view_for_table', {
+                'p_table_id': created_table['id'], # The view name will be constructed inside the function
+                'p_table_name': created_table['name'],
+                'p_columns': created_table['columns']
+            }).execute()
+        except Exception as view_error:
+            # If view creation fails, we don't fail the whole request, but we should log it.
+            print(f"Warning: Could not create view for table {created_table['id']}: {view_error}")
+
         return created_table
     except APIError as e:
         # Check for a unique constraint violation on the table name for that database
@@ -329,8 +337,13 @@ async def create_table_by_db_name(db_name: str, table_data: TableCreate, auth_de
         database_id = db_check.data['id']
 
         # 2. Use the existing create_database_table function with the fetched ID.
-        # This avoids duplicating logic.
+        # This avoids duplicating logic. We need to pass the dictionary representation of the model.
         return await create_database_table(database_id, table_data, auth_details)
+
+    except APIError as e:
+        if "user_tables_database_id_name_key" in str(e):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A table with the name '{table_data.name}' already exists in this database.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not create table: {str(e)}")
     except HTTPException as e:
         # Re-raise HTTPExceptions from called functions
         raise e
@@ -401,8 +414,8 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
             })
 
         is_pk = "PRIMARY KEY" in type_and_constraints.upper()
-        # Correctly identify auto-incrementing columns. 'SERIAL' is a type, not just a constraint.
-        is_auto_increment = 'AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()
+        is_auto_increment = ('AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()) or \
+                            (is_pk and 'INT' in col_type.upper() and 'AUTO_INCREMENT' not in type_and_constraints.upper())
 
         columns_defs.append(ColumnDefinition(
             name=col_name,
@@ -674,11 +687,22 @@ async def update_database_table(table_id: int, table_data: TableUpdate, auth_det
             "name": table_data.name,
             "columns": [col.dict() for col in table_data.columns]
         }
-        db_response = supabase.table("user_tables").update(update_data, returning="representation").eq("id", table_id).execute()
-        if not db_response.data:
+        response = supabase.table("user_tables").update(update_data, returning="representation").eq("id", table_id).execute()
+        if not response.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found or access denied.")
         
-        updated_table = db_response.data[0]
+        updated_table = response.data[0]
+
+        # --- FIX: Re-create the view to reflect the structure changes ---
+        # This is the missing piece. Without this, the SQL Runner's view becomes outdated.
+        try:
+            supabase.rpc('create_or_replace_view_for_table', {
+                'p_table_id': updated_table['id'], # The view name will be constructed inside the function
+                'p_table_name': updated_table['name'],
+                'p_columns': updated_table['columns']
+            }).execute()
+        except Exception as view_error:
+            print(f"Warning: Could not update view for table {updated_table['id']} after structure change: {view_error}")
 
         return updated_table
     except APIError as e:
@@ -752,37 +776,51 @@ async def get_table_rows(
     """
     supabase = auth_details["client"]
     try:
-        # --- REFACTOR: Query the base table_rows directly to avoid view-related race conditions ---
-        # We select the internal id, created_at, and the data blob.
-        # The frontend will be responsible for unpacking the 'data' object.
-        query = supabase.table("table_rows").select("id, created_at, data", count='exact').eq("table_id", table_id)
+        # 1. Get the table schema to find the user-defined primary key column name
+        table_schema_dict = await get_single_table(table_id, auth_details)
+        # When calling an endpoint function directly, it returns a dict, not a Pydantic model.
+        # We must convert it to a model to use attribute access.
+        table_schema_obj = TableResponse(**table_schema_dict)
+        pk_col_name = next((col.name for col in table_schema_obj.columns if col.is_primary_key), None)
+        # --- FIX: Check if the primary key is auto-incrementing ---
+        pk_is_auto_increment = False
+        if pk_col_name:
+            pk_is_auto_increment = next((col.is_auto_increment for col in table_schema_obj.columns if col.name == pk_col_name), False)
+
+        # 2. Build the query
+        query = supabase.table("table_rows").select("*", count='exact').eq("table_id", table_id)
 
         if search:
-            # To search the JSONB data, we need the column names from the table's schema.
-            table_schema_dict = await get_single_table(table_id, auth_details)
-            table_schema_obj = TableResponse(**table_schema_dict)
-            
-            # We only search columns that are text-like to avoid casting errors in the DB.
-            searchable_columns = [
-                col.name for col in table_schema_obj.columns 
-                if col.type in ['text', 'varchar'] # Add other text-like types if necessary
-            ]
-            
-            # --- FIX: Correctly build the 'or' filter for JSONB search ---
-            # The filter needs to be in the format `(column1.ilike.value,column2.ilike.value)`.
-            # For JSONB, the column name is `data->>column_name`.
+            # Search across all non-pk columns by casting their JSONB value to text
+            searchable_columns = [col.name for col in table_schema_obj.columns if not col.is_primary_key]
             if searchable_columns:
-                or_filter_parts = [f'data->>{col}.ilike.%{search}%' for col in searchable_columns]
-                or_filter_string = f"or({','.join(or_filter_parts)})"
-                # The `or_` method in postgrest-py expects the filter string without the `or()` wrapper.
-                # We add it as a direct query parameter instead.
-                query = query.params({ "or": f"({','.join(or_filter_parts)})" })
+                or_filter = ",".join([f"data->>{col}.ilike.%{search}%" for col in searchable_columns])
+                query = query.or_(or_filter)
 
-        # Order by the internal 'id' for consistent pagination.
-        response = query.order("id", desc=False).range(offset, offset + limit - 1).execute()
+        # RLS on table_rows ensures user can only access rows they own.
+        response = query.order("id").range(offset, offset + limit - 1).execute()
 
-        # The response format is now List[RowResponse], which the frontend will handle.
-        return {"total": response.count, "data": response.data or []}
+        # 3. Process results to inject the user-visible PK
+        processed_rows = []
+        # Ensure response.data is a list before iterating
+        if response.data and isinstance(response.data, list):
+            if pk_col_name and pk_is_auto_increment:
+                for i, row in enumerate(response.data):
+                    # Calculate the user-visible ID based on pagination
+                    user_visible_id = offset + i + 1
+                    
+                    # Inject it into the data blob
+                    if row.get("data") is not None:
+                        row["data"][pk_col_name] = user_visible_id
+                    else:
+                        row["data"] = {pk_col_name: user_visible_id}
+                    processed_rows.append(row)
+            # Fallback if no PK is defined (shouldn't happen with current UI)
+            else:
+                # If PK is not auto-increment, the value is already in the data blob.
+                processed_rows = response.data
+ 
+        return {"total": response.count, "data": processed_rows}
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -794,12 +832,31 @@ async def get_all_table_rows(table_id: int, auth_details: dict = Depends(get_cur
     """
     try:
         supabase = auth_details["client"]
-        # --- REFACTOR: Query the base table_rows directly. ---
-        # This is used for CSV export.
-        response = supabase.table("table_rows").select("id, created_at, data").eq("table_id", table_id).order("id").execute()
-        
-        return response.data
+        # 1. Get the table schema to find the user-defined primary key column name
+        table_schema_dict = await get_single_table(table_id, auth_details)
+        table_schema_obj = TableResponse(**table_schema_dict)
+        pk_col = next((col for col in table_schema_obj.columns if col.is_primary_key), None)
+        pk_col_name = pk_col.name if pk_col else None
+        pk_is_auto_increment = pk_col.is_auto_increment if pk_col else False
 
+        # RLS on table_rows ensures user can only access rows they own.
+        response = supabase.table("table_rows").select("*").eq("table_id", table_id).order("id").execute()
+
+        # 2. Process results to inject the user-visible PK if it's auto-increment
+        processed_rows = []
+        if pk_col_name:
+            for i, row in enumerate(response.data):
+                user_visible_id = i + 1
+                if row.get("data") is not None:
+                    row["data"][pk_col_name] = user_visible_id
+                else:
+                    row["data"] = {pk_col_name: user_visible_id}
+                processed_rows.append(row)
+        else:
+            # If PK is not auto-increment, the value is already in the data blob.
+            processed_rows = response.data
+
+        return processed_rows
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -841,37 +898,24 @@ async def update_table_row(row_id: int, row_data: RowCreate, auth_details: dict 
     """
     Updates the data for a specific row.
     """
-    supabase = auth_details["client"]
     try:
-        # --- FIX: The `row_id` from the URL is the value of the user-defined PK, not the internal `table_rows.id`.
-        # We must first find the internal ID based on the user-defined PK.
+        supabase = auth_details["client"]
 
-        # 1. Find which table this row belongs to by looking for a row where the PK column matches the provided `row_id`.
-        # This is a bit complex because we don't know the table_id upfront. We have to query all rows.
-        # A better approach would be to include table_id in the URL, but we'll work with the current structure.
-        
-        # First, find the table_id by looking up the row.
-        # This is inefficient but necessary with the current endpoint structure.
-        # We find the row by its actual ID and get its table_id.
-        row_lookup_res = supabase.table("table_rows").select("id, table_id").eq("id", row_id).single().execute()
-        if not row_lookup_res.data:
+        # 1. Fetch the row to get its table_id for validation
+        existing_row_res = supabase.table("table_rows").select("table_id").eq("id", row_id).single().execute()
+        if not existing_row_res.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Row not found or access denied.")
-        
-        internal_row_id = row_lookup_res.data['id']
-        table_id = row_lookup_res.data['table_id']
+        table_id = existing_row_res.data['table_id']
 
-        # 2. Validate the incoming data against the table's schema.
+        # 2. --- FIX: Add validation before updating ---
         await _validate_row_data(supabase, table_id, row_data.data, row_id=row_id)
 
         # 3. Update the row data as requested.
-        # We use the internal_row_id we found for the update operation.
-        response = supabase.table("table_rows").update({"data": row_data.data}, returning="representation").eq("id", internal_row_id).execute()
+        response = supabase.table("table_rows").update({"data": row_data.data}, returning="representation").eq("id", row_id).execute()
         if not response.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Row not found or access denied.") # pragma: no cover
         
-        # 4. Return the updated row. We use the internal ID to fetch it.
-        return await get_single_row(internal_row_id, auth_details)
-
+        return await get_single_row(row_id, auth_details)
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not update row: {e.message}")
     except HTTPException as e:
@@ -883,7 +927,6 @@ async def update_table_row(row_id: int, row_data: RowCreate, auth_details: dict 
 async def delete_table_row(row_id: int, auth_details: dict = Depends(get_current_user_details)):
     """
     Deletes a specific row.
-    The `row_id` is the value of the user-defined primary key.
     """
     try:
         supabase = auth_details["client"]
@@ -910,71 +953,6 @@ async def get_single_row(row_id: int, auth_details: dict = Depends(get_current_u
         return response.data
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not fetch row: {str(e)}")
-
-@app.post("/api/v1/query-builder/fetch")
-async def fetch_with_query_builder(
-    query_request: QueryBuilderRequest,
-    auth_details: dict = Depends(get_current_user_details)
-):
-    """
-    Executes a safe, structured query based on selections from the visual query builder.
-    This does NOT execute raw SQL from the client.
-    """
-    supabase = auth_details["client"]
-    table_id = query_request.table_id
-
-    try:
-        # 1. Verify user has access to the table (implicitly done by RLS on table_rows)
-        # and get table schema for validation.
-        table_schema_dict = await get_single_table(table_id, auth_details)
-        table_schema = TableResponse(**table_schema_dict)
-        valid_columns = {col.name for col in table_schema.columns}
-
-        # 2. Validate requested columns and filters against the schema
-        if not all(c in valid_columns for c in query_request.columns if c != '*'):
-            raise HTTPException(status_code=400, detail="Invalid column requested.")
-        if not all(f.column in valid_columns for f in query_request.filters):
-            raise HTTPException(status_code=400, detail="Invalid column specified in filter.")
-
-        # 3. Build the query
-        # We only select the 'data' jsonb field and will process it later.
-        query = supabase.table("table_rows").select("data").eq("table_id", table_id)
-
-        # 4. Apply filters safely
-        for f in query_request.filters:
-            # Sanitize operator to prevent abuse
-            # Using PostgREST operators: https://postgrest.org/en/stable/api.html#operators
-            operator_map = {
-                '=': 'eq', '!=': 'neq', '>': 'gt', '<': 'lt', '>=': 'gte', '<=': 'lte',
-                'LIKE': 'ilike', 'NOT LIKE': 'not.ilike', 'IN': 'in'
-            }
-            if f.operator in operator_map:
-                # For LIKE, wrap value in wildcards
-                value = f"%{f.value}%" if 'LIKE' in f.operator else f.value
-                # For IN, the value should be a tuple of values
-                if f.operator == 'IN':
-                    value = tuple(v.strip() for v in f.value.split(','))
-                
-                # The format for filtering on a JSONB column is `data->>column_name`
-                query = query.filter(f"data->>{f.column}", operator_map[f.operator], value)
-            elif f.operator == 'IS NULL':
-                query = query.is_(f"data->>{f.column}", None)
-            elif f.operator == 'IS NOT NULL':
-                query = query.not_.is_(f"data->>{f.column}", None)
-
-        # Limit results for safety
-        response = query.limit(1000).execute()
-
-        # 5. Process results to select only the requested columns
-        if '*' in query_request.columns:
-            return [row['data'] for row in response.data]
-        else:
-            processed_data = []
-            for row in response.data:
-                processed_data.append({col: row['data'].get(col) for col in query_request.columns})
-            return processed_data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
 
 async def _validate_row_data(
     supabase: Client,
@@ -1134,10 +1112,11 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
         create_statement += "\n);\n\n"
         sql_script += create_statement
 
-        # Fetch all rows for the table directly from table_rows.
+        # --- FIX: Fetch raw rows directly to avoid incorrect PK injection from get_all_table_rows ---
+        # RLS on table_rows ensures user can only access rows they own.
         raw_rows_res = supabase.table("table_rows").select("data").eq("table_id", table.id).order("id").execute()
 
-        if raw_rows_res.data and isinstance(raw_rows_res.data, list):
+        if raw_rows_res.data:
             sql_script += f"-- Data for table: {table.name}\n"
             for row in raw_rows_res.data:
                 row_data = row.get('data')
@@ -1145,14 +1124,12 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
                     continue
 
                 pk_col = next((col for col in table.columns if col.is_primary_key), None)
-                # --- FIX: Treat 'serial' type as auto-incrementing as well ---
-                pk_is_auto_increment = (pk_col.is_auto_increment or (pk_col.type or '').lower() == 'serial') if pk_col else False
-
+                pk_is_auto_increment = pk_col.is_auto_increment if pk_col else False
+                
                 columns_to_insert = [f'"{k}"' for k, v in row_data.items() if not (pk_is_auto_increment and k == pk_col.name)]
                 values_to_insert = []
                 for k, v in row_data.items():
                     if pk_is_auto_increment and k == pk_col.name:
-                        # Skip auto-incrementing PKs from INSERT statements
                         continue
 
                     if isinstance(v, str):
@@ -1321,8 +1298,8 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
                     })
 
                 is_pk = "PRIMARY KEY" in type_and_constraints.upper()
-                # Correctly identify auto-incrementing columns. 'SERIAL' is a type, not just a constraint.
-                is_auto_increment = 'AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()
+                is_auto_increment = ('AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()) or \
+                                    (is_pk and 'INT' in col_type.upper() and 'AUTO_INCREMENT' not in type_and_constraints.upper())
 
                 columns_defs.append(ColumnDefinition(
                     name=col_name,
@@ -1370,14 +1347,123 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
         # Pass 4: Insert all data
         for statement in statements:
             if statement.upper().startswith("INSERT INTO"):
-                await _parse_and_execute_insert(statement, created_tables_map, new_db_id, supabase, user) # This is already async
+                await _parse_and_execute_insert(statement, created_tables_map, new_db_id, supabase, user)
         
+        # --- FIX: After all tables and data are imported, create the views for the SQL runner ---
+        final_tables_res = await get_database_tables(new_db_id, auth_details)
+        for table in final_tables_res:
+            try:
+                supabase.rpc('create_or_replace_view_for_table', {
+                    'p_table_id': table['id'],
+                    'p_table_name': table['name'],
+                    'p_columns': table['columns']
+                }).execute()
+            except Exception as view_error:
+                print(f"Warning: Could not create view for imported table {table['id']} ({table['name']}): {view_error}")
+
         return db_response
     except Exception as e:
         # If any part of the process fails, roll back by deleting the created database.
         if new_db_id:
             await delete_user_database(new_db_id, auth_details)
         raise HTTPException(status_code=400, detail=f"Failed to import SQL script: {str(e)}. The new database has been rolled back.")
+
+@app.post("/api/v1/databases/{database_id}/query")
+async def run_sql_query(
+    database_id: int, 
+    query_data: QueryRequest, 
+    response: Response, # Add the Response object to the signature
+    auth_details: dict = Depends(get_current_user_details)
+):
+    """
+    Executes a read-only SQL query within the user's security context.
+    This is designed to work with the views created for each table.
+    """
+    supabase = auth_details["client"]
+
+    # --- FIX: Prevent aggressive caching by browsers or CDNs ---
+    # These headers instruct any intermediate cache to not store the response.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+
+    # --- FIX: Make query parsing more robust by stripping comments and preserving formatting ---
+    # Remove multi-line /* ... */ comments first, then single-line -- comments.
+    query_no_multiline_comments = re.sub(r'/\*.*?\*/', '', query_data.query, flags=re.DOTALL)
+    # Remove single-line comments.
+    query_no_single_line_comments = re.sub(r'--.*', '', query_no_multiline_comments)
+    original_query = query_no_single_line_comments.strip().rstrip(';')
+
+    # Basic validation: only allow SELECT statements for security.
+    if not original_query.upper().startswith("SELECT"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only SELECT queries are allowed.")
+
+    # --- FIX: Automatically rewrite table names to their prefixed view names ---
+    # 1. Fetch all table names for the current database.
+    tables_res = supabase.table("user_tables").select("name").eq("database_id", database_id).execute()
+    if not tables_res.data:
+        # If there are no tables, we can just run the query as-is.
+        query = original_query
+    else:
+        # 2. Create a mapping from original table name to the prefixed view name.
+        table_names = [t['name'] for t in tables_res.data]
+        # Sort by length descending to replace longer names first (e.g., 'book_authors' before 'book').
+        table_names.sort(key=len, reverse=True)
+
+        # 3. Iteratively replace each table name in the query with its view name.
+        query = original_query
+        for name in table_names:
+            # Use a case-insensitive regex with word boundaries to avoid partial matches.
+            query = re.sub(r'\b' + re.escape(name) + r'\b', f'db_{database_id}_{name}', query, flags=re.IGNORECASE)
+
+    try:
+        # Verify user has access to the parent database first.
+        db_check = supabase.table("user_databases").select("id").eq("id", database_id).maybe_single().execute()
+        if not db_check.data:
+            raise HTTPException(status_code=404, detail="Database not found or access denied")
+
+        # --- FIX: Execute the query using a POST request to a dummy RPC endpoint ---
+        # This is the correct way to run arbitrary read-only SQL via PostgREST.
+        # The user's JWT is passed, so all queries are executed within their security context,
+        # respecting RLS policies on the underlying views.
+        # We POST to a non-existent function name; PostgREST will execute the SQL from the body instead.
+        # --- FIX: Prepend SET LOCAL to the query to ensure views in the 'public' schema are found. ---
+        # This ensures that the user's query can find the views (e.g., db_45_books)
+        # which are located in the 'public' schema. PostgREST runs this in a transaction automatically,
+        # so `SET LOCAL` is safe and only affects this one query.
+        final_sql_payload = f"SET LOCAL search_path = public, extensions; {query};"
+
+        postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/run_user_query"
+        headers = {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {auth_details['token']}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+        # The query is sent in the request body.
+        async with httpx.AsyncClient() as client:
+            response = await client.post(postgrest_url, headers=headers, json={"sql": final_sql_payload})
+
+        # --- FIX: Add robust error handling for non-200 responses ---
+        if response.status_code != 200:
+            try:
+                error_data = response.json()
+                # Supabase errors have a 'message' key.
+                error_message = error_data.get('message', 'An unknown query error occurred.')
+            except Exception:
+                # If the response isn't JSON, use the raw text.
+                error_message = response.text
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query failed: {error_message}")
+
+        result_data = response.json()
+
+        if not result_data:
+            return {"columns": [], "rows": []}
+
+        columns = list(result_data[0].keys()) if result_data else []
+        return {"columns": columns, "rows": result_data}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
 
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
