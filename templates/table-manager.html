@@ -460,7 +460,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const queryBuilderBtn = document.getElementById('query-builder-btn');
     const mainContent = document.getElementById('table-view-content'); // This was correct
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn'); // This was correct
-
     
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
@@ -659,7 +658,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.target.classList.add('bg-blue-100', 'text-blue-700', 'font-semibold');
             
             // Show table view, hide other main content areas
-            mainContent.classList.remove('hidden');
+            tableViewContent.classList.remove('hidden');
             queryBuilderContent.classList.add('hidden');
             placeholderContent.classList.add('hidden');
 
@@ -1799,7 +1798,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     value = `'${value.replace(/'/g, "''")}'`;
                 }
                 if (operator === 'IN') {
-                    value = `(${value})`;
+                    // For IN clauses, we need to split the comma-separated string
+                    // and wrap each value in single quotes.
+                    const inValues = value.split(',').map(v => `'${v.trim().replace(/'/g, "''")}'`).join(', ');
+                    value = `(${inValues})`;
                 }
                 filters.push(`"${column}" ${operator} ${value}`);
             }

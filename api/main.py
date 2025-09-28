@@ -806,23 +806,13 @@ async def get_table_rows(
 
         # 3. Process results to inject the user-visible PK
         processed_rows = []
-        # Ensure response.data is a list before iterating
+        # If PK is not auto-increment, the value is already in the data blob.
+        # If it IS auto-increment, the value is also already in the data blob because
+        # the view `user_table_view_{id}` correctly casts the internal row ID to the user's PK name.
+        # The previous logic was incorrectly overwriting this value.
+        # The fix is to simply use the data as-is from the view.
         if response.data and isinstance(response.data, list):
-            if pk_col_name and pk_is_auto_increment:
-                for i, row in enumerate(response.data):
-                    # Calculate the user-visible ID based on pagination
-                    user_visible_id = offset + i + 1
-                    
-                    # Inject it into the data blob
-                    if row.get("data") is not None:
-                        row["data"][pk_col_name] = user_visible_id
-                    else:
-                        row["data"] = {pk_col_name: user_visible_id}
-                    processed_rows.append(row)
-            # Fallback if no PK is defined (shouldn't happen with current UI)
-            else:
-                # If PK is not auto-increment, the value is already in the data blob.
-                processed_rows = response.data
+            processed_rows = response.data
  
         return {"total": response.count, "data": processed_rows}
     except APIError as e:
@@ -847,20 +837,11 @@ async def get_all_table_rows(table_id: int, auth_details: dict = Depends(get_cur
         response = supabase.table("table_rows").select("*").eq("table_id", table_id).order("id").execute()
 
         # 2. Process results to inject the user-visible PK if it's auto-increment
-        processed_rows = []
-        if pk_col_name:
-            for i, row in enumerate(response.data):
-                user_visible_id = i + 1
-                if row.get("data") is not None:
-                    row["data"][pk_col_name] = user_visible_id
-                else:
-                    row["data"] = {pk_col_name: user_visible_id}
-                processed_rows.append(row)
-        else:
-            # If PK is not auto-increment, the value is already in the data blob.
-            processed_rows = response.data
+        # The view `user_table_view_{id}` correctly casts the internal row ID to the user's PK name.
+        # The previous logic was incorrectly overwriting this value.
+        # The fix is to simply return the data as-is from the view.
+        return response.data
 
-        return processed_rows
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
