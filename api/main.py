@@ -768,10 +768,15 @@ async def get_table_rows(
                 if col.type in ['text', 'varchar'] # Add other text-like types if necessary
             ]
             
-            # Build a PostgREST 'or' filter for searching within the JSONB 'data' field.
-            # The format is `data->>column_name.ilike.%search_term%`
-            or_filter = ",".join([f'data->>{col}.ilike.%{search}%' for col in searchable_columns])
-            query = query.or_(or_filter)
+            # --- FIX: Correctly build the 'or' filter for JSONB search ---
+            # The filter needs to be in the format `(column1.ilike.value,column2.ilike.value)`.
+            # For JSONB, the column name is `data->>column_name`.
+            if searchable_columns:
+                or_filter_parts = [f'data->>{col}.ilike.%{search}%' for col in searchable_columns]
+                or_filter_string = f"or({','.join(or_filter_parts)})"
+                # The `or_` method in postgrest-py expects the filter string without the `or()` wrapper.
+                # We add it as a direct query parameter instead.
+                query = query.params({ "or": f"({','.join(or_filter_parts)})" })
 
         # Order by the internal 'id' for consistent pagination.
         response = query.order("id", desc=False).range(offset, offset + limit - 1).execute()
