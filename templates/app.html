@@ -21,19 +21,21 @@
     <header class="bg-white shadow-sm">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
-            <a href="/subscription" id="subscription-status-banner" class="hidden items-center gap-2 text-sm font-semibold text-gray-600 hover:text-blue-600 mr-4 p-2 rounded-lg hover:bg-gray-100"></a>
-            <div class="relative">
-                <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    <!-- Initials will be inserted here by JS -->
-                </button>
-                <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-10">
-                    <div class="px-4 py-2 border-b">
-                        <p id="profile-name" class="text-sm font-medium text-gray-900 truncate">Loading...</p>
-                        <p id="profile-email" class="text-sm text-gray-500 truncate">...</p>
-                    </div>
-                    <div class="py-1">
-                        <a href="#" id="sign-out-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign Out</a>
-                        <a href="/confirm-delete" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50">Delete Account</a>
+            <div class="flex items-center">
+                <a href="/subscription" id="subscription-status-banner" class="hidden items-center gap-2 text-sm font-semibold text-gray-600 hover:text-blue-600 mr-4 p-2 rounded-lg hover:bg-gray-100"></a>
+                <div class="relative">
+                    <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        <!-- Initials will be inserted here by JS -->
+                    </button>
+                    <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-10">
+                        <div class="px-4 py-2 border-b">
+                            <p id="profile-name" class="text-sm font-medium text-gray-900 truncate">Loading...</p>
+                            <p id="profile-email" class="text-sm text-gray-500 truncate">...</p>
+                        </div>
+                        <div class="py-1">
+                            <a href="#" id="sign-out-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign Out</a>
+                            <a href="/confirm-delete" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50">Delete Account</a>
+                        </div>
                     </div>
                 </div>
             </div>
