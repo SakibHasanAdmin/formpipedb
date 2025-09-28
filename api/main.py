@@ -1314,6 +1314,12 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
                 update_payload = TableUpdate(name=table_to_update.name, columns=table_to_update.columns)
                 await update_database_table(table_to_update.id, update_payload, auth_details)
 
+        # Pass 4: Execute all INSERT statements
+        for statement in statements:
+            if statement.upper().startswith("INSERT INTO"):
+                # This helper function handles parsing and executing the INSERT statement.
+                await _parse_and_execute_insert(statement, created_tables_map, new_db_id, supabase, user)
+
         return db_response
     except Exception as e:
         # If any part of the process fails, roll back by deleting the created database.
