@@ -303,7 +303,7 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
         # --- Automatically create a VIEW for this table ---
         # This makes the table immediately queryable in the SQL Runner.
         try:
-            supabase.rpc('create_or_replace_view_for_table_v2', {
+            supabase.rpc('create_or_replace_view_for_table', {
                 'p_table_id': created_table['id'],
                 'p_database_id': database_id,
                 'p_table_name': created_table['name']
@@ -696,7 +696,7 @@ async def update_database_table(table_id: int, table_data: TableUpdate, auth_det
         # --- FIX: Re-create the view to reflect the structure changes ---
         # This is the missing piece. Without this, the SQL Runner's view becomes outdated.
         try:
-            supabase.rpc('create_or_replace_view_for_table_v2', {
+            supabase.rpc('create_or_replace_view_for_table', {
                 'p_table_id': updated_table['id'],
                 'p_database_id': updated_table['database_id'],
                 'p_table_name': updated_table['name']
@@ -1353,7 +1353,7 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
         final_tables_res = await get_database_tables(new_db_id, auth_details)
         for table in final_tables_res:
             try:
-                supabase.rpc('create_or_replace_view_for_table_v2', {
+                supabase.rpc('create_or_replace_view_for_table', {
                     'p_table_id': table['id'],
                     'p_database_id': new_db_id,
                     'p_table_name': table['name'],
