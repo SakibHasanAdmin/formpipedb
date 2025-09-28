@@ -1604,6 +1604,26 @@ async def table_manager_page(request: Request, db_name: str):
         },
     )
 
+@app.get("/subscription", response_class=HTMLResponse)
+async def subscription_page(request: Request):
+    return templates.TemplateResponse(
+        "subscription.html", 
+        {
+            "request": request, 
+            "supabase_url": SUPABASE_URL, 
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        })
+
+@app.get("/checkout", response_class=HTMLResponse)
+async def checkout_page(request: Request):
+    return templates.TemplateResponse(
+        "checkout.html", 
+        {
+            "request": request, 
+            "supabase_url": SUPABASE_URL, 
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        })
+
 @app.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
     return templates.TemplateResponse("about.html", {"request": request})
