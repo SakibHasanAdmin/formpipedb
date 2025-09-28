@@ -180,7 +180,7 @@
                 // The onAuthStateChange listener on other pages will pick it up automatically.
                 const urlParams = new URLSearchParams(window.location.search);
                 const redirectTo = urlParams.get('redirect_to');
-                if (redirectTo) {
+                if (redirectTo && redirectTo.startsWith('/')) {
                     window.location.href = redirectTo;
                 } else {
                     window.location.href = '/app';

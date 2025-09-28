@@ -1537,6 +1537,26 @@ async def pricing_page(request: Request):
             "supabase_anon_key": SUPABASE_ANON_KEY
         })
 
+@app.get("/checkout", response_class=HTMLResponse)
+async def checkout_page(request: Request):
+    return templates.TemplateResponse(
+        "checkout.html", 
+        {
+            "request": request, 
+            "supabase_url": SUPABASE_URL, 
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        })
+
+@app.get("/subscription", response_class=HTMLResponse)
+async def subscription_page(request: Request):
+    return templates.TemplateResponse(
+        "subscription.html", 
+        {
+            "request": request, 
+            "supabase_url": SUPABASE_URL, 
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        })
+
 @app.get("/forgot-password", response_class=HTMLResponse)
 async def forgot_password_page(request: Request):
     return templates.TemplateResponse(

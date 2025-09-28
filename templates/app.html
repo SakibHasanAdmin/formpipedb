@@ -21,6 +21,7 @@
     <header class="bg-white shadow-sm">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
+            <a href="/subscription" id="subscription-status-banner" class="hidden items-center gap-2 text-sm font-semibold text-gray-600 hover:text-blue-600 mr-4 p-2 rounded-lg hover:bg-gray-100"></a>
             <div class="relative">
                 <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <!-- Initials will be inserted here by JS -->
@@ -438,6 +439,24 @@
                         document.getElementById('profile-name').textContent = fullName || 'User';
                         document.getElementById('profile-email').textContent = user.email;
 
+                        // Fetch and display subscription status
+                        const subscriptionBanner = document.getElementById('subscription-status-banner');
+                        try {
+                            const subResponse = await fetchWithAuth('/api/v1/users/me/subscription');
+                            if (subResponse.ok) {
+                                const sub = await subResponse.json();
+                                subscriptionBanner.classList.remove('hidden');
+                                subscriptionBanner.classList.add('flex');
+                                if (sub.plan === 'pro') {
+                                    subscriptionBanner.innerHTML = `<span>Pro Plan</span>`;
+                                } else {
+                                    subscriptionBanner.href = '/login?redirect_to=/checkout';
+                                    subscriptionBanner.innerHTML = `<span>Upgrade to Pro</span>`;
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Could not fetch subscription status:", error);
+                        }
                         // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
                         if (!initialDataLoaded) {
                             fetchDatabases();
