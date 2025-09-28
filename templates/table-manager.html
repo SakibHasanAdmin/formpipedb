@@ -1152,7 +1152,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const sqlTableName = createMatch ? createMatch[1] : 'new_sql_table';
             const sqlScript = document.getElementById('create-table-sql-input').value.trim();
             url = `/api/v1/databases/${state.dbId}/create-table-from-sql`;
-            payload = { name: "default_name_from_sql_tab", script: sqlScript };
+            payload = { name: sqlTableName, script: sqlScript };
         }
 
         try {
@@ -1166,13 +1166,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorDetail);
             }
             closeModal(createTableModal);
- 
+
             // Poll for the table's view to be ready before proceeding.
             // This prevents race conditions where the UI tries to fetch data from a view
             // that hasn't been created or recognized by PostgREST yet.
             const newTable = await response.json();
             const isReady = await pollForTableReady(newTable.id);
- 
+
             if (isReady) {
                 await fetchDbIdAndTables();
                 // Auto-select the newly created table
@@ -1574,7 +1574,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } 
                 closeModal(createTableModal);
                 const newTable = await response.json();
- 
+
                 // Poll for the table's view to be ready before proceeding.
                 const isReady = await pollForTableReady(newTable.id);
                 if (isReady) {
