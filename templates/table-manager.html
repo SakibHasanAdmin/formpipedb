@@ -404,6 +404,7 @@
             </div>
         </div>
         <div class="p-4 mt-auto border-t bg-gray-50 flex justify-end gap-4">
+            <button id="download-csv-btn" type="button" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed" disabled>Download as CSV</button>
             <button id="generate-sql-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-semibold">Generate SQL Code</button>
             <button id="preview-data-btn" type="button" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold">Preview Data</button>
         </div>
@@ -495,8 +496,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSqlBuilderBtn = document.getElementById('close-sql-builder-btn');
 
     // --- SQL Builder State & Elements ---
+    const downloadCsvBtn = document.getElementById('download-csv-btn');
     let dbDataCache = {}; // To store all DB data for client-side querying
     let queryBuilderState = { from: null, selects: [], joins: [], wheres: [] };
+    let currentQueryResults = []; // To store the results of the last preview
 
     
     // Abort controller to cancel stale data fetch requests
@@ -2150,6 +2153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    downloadCsvBtn.addEventListener('click', handleExportQueryResultsCSV);
 
     document.getElementById('generate-sql-btn').addEventListener('click', () => {
         const fromTableName = document.getElementById('from-table-select').value;
@@ -2325,6 +2329,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         renderPreviewResults(finalResults);
+        // Store results for CSV download and manage button state
+        currentQueryResults = finalResults;
+        downloadCsvBtn.disabled = currentQueryResults.length === 0;
     });
 
     function renderPreviewResults(data) {
@@ -2382,6 +2389,39 @@ document.addEventListener('DOMContentLoaded', () => {
             footer.textContent = `Showing first 100 of ${data.length} rows.`;
             container.appendChild(footer);
         }
+    }
+
+    function handleExportQueryResultsCSV() {
+        if (!currentQueryResults || currentQueryResults.length === 0) {
+            showError("No data to export.");
+            return;
+        }
+
+        const headers = Object.keys(currentQueryResults[0]);
+        const csvRows = [headers.join(',')]; // Header row
+
+        currentQueryResults.forEach(row => {
+            const values = headers.map(header => {
+                const value = row[header];
+                const strValue = (value === null || value === undefined) ? '' : String(value);
+                // Basic CSV escaping: wrap in quotes if it contains a comma or quote
+                if (strValue.includes(',') || strValue.includes('"')) {
+                    return `"${strValue.replace(/"/g, '""')}"`;
+                }
+                return strValue;
+            });
+            csvRows.push(values.join(','));
+        });
+
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        a.href = url;
+        a.download = `${state.dbName}_custom_query_${today}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
     // --- App Initialization ---
