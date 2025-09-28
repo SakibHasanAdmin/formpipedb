@@ -1884,6 +1884,120 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- SQL Query Builder Logic ---
 
+    function updateQueryBuilderColumns() {
+        const fromTable = document.getElementById('from-table-select').value;
+        const selectContainer = document.getElementById('select-columns-container');
+        const joinContainers = document.querySelectorAll('.join-condition');
+        const whereContainers = document.querySelectorAll('.where-condition');
+
+        let availableTables = {};
+        if (fromTable && dbDataCache[fromTable]) {
+            const firstRow = dbDataCache[fromTable][0];
+            if (firstRow && firstRow.data) {
+                availableTables[fromTable] = Object.keys(firstRow.data);
+            }
+        }
+
+        // Update SELECT container
+        selectContainer.innerHTML = '';
+        if (Object.keys(availableTables).length === 0) {
+            selectContainer.innerHTML = '<p class="text-sm text-gray-500">Select a table first.</p>';
+        } else {
+            Object.entries(availableTables).forEach(([tableName, columns]) => {
+                columns.forEach(colName => {
+                    const id = `select-col-${tableName}-${colName}`;
+                    selectContainer.innerHTML += `
+                        <label for="${id}" class="flex items-center gap-2 p-1 rounded hover:bg-gray-200 cursor-pointer">
+                            <input type="checkbox" id="${id}" data-table="${tableName}" data-column="${colName}" class="h-4 w-4 rounded">
+                            <span class="font-mono text-sm">${tableName}.${colName}</span>
+                        </label>
+                    `;
+                });
+            });
+        }
+
+        // Gather columns from JOINed tables
+        joinContainers.forEach(joinDiv => {
+            const joinTable = joinDiv.querySelector('.join-table-select').value;
+            if (joinTable && dbDataCache[joinTable]) {
+                const firstRow = dbDataCache[joinTable][0];
+                if (firstRow && firstRow.data) {
+                    availableTables[joinTable] = Object.keys(firstRow.data);
+                }
+            }
+        });
+
+        const allColumnsOptions = Object.entries(availableTables)
+            .map(([tableName, columns]) => columns.map(col => `<option value="${tableName}.${col}">${tableName}.${col}</option>`).join(''))
+            .join('');
+
+        // Update JOIN column dropdowns
+        joinContainers.forEach(joinDiv => {
+            const leftColSelect = joinDiv.querySelector('.join-left-col-select');
+            const rightColSelect = joinDiv.querySelector('.join-right-col-select');
+            const joinTable = joinDiv.querySelector('.join-table-select').value;
+
+            const currentLeftVal = leftColSelect.value;
+            const currentRightVal = rightColSelect.value;
+
+            // Left side can be any column from tables joined so far
+            leftColSelect.innerHTML = allColumnsOptions;
+            leftColSelect.value = currentLeftVal;
+
+            // Right side is only columns from the new table in this join
+            rightColSelect.innerHTML = '';
+            if (joinTable && availableTables[joinTable]) {
+                rightColSelect.innerHTML = availableTables[joinTable].map(col => `<option value="${joinTable}.${col}">${joinTable}.${col}</option>`).join('');
+                rightColSelect.value = currentRightVal;
+            }
+        });
+
+        // Update WHERE column dropdowns
+        whereContainers.forEach(whereDiv => {
+            const colSelect = whereDiv.querySelector('.where-column-select');
+            const currentVal = colSelect.value;
+            colSelect.innerHTML = `<option value="">-- Select Column --</option>${allColumnsOptions}`;
+            colSelect.value = currentVal;
+        });
+    }
+
+    document.getElementById('add-join-btn').addEventListener('click', () => {
+        const container = document.getElementById('join-conditions-container');
+        const div = document.createElement('div');
+        div.className = 'join-condition grid grid-cols-11 gap-2 items-center';
+        const tableOptions = Object.keys(dbDataCache).map(t => `<option value="${t}">${t}</option>`).join('');
+
+        div.innerHTML = `
+            <select class="join-table-select col-span-3 p-1 border rounded-md bg-white text-xs"><option value="">-- Join Table --</option>${tableOptions}</select>
+            <select class="join-left-col-select col-span-3 p-1 border rounded-md bg-white text-xs"><option>...</option></select>
+            <span class="text-center">=</span>
+            <select class="join-right-col-select col-span-3 p-1 border rounded-md bg-white text-xs"><option>...</option></select>
+            <button class="remove-join-btn text-red-500 hover:text-red-700 text-xs">Remove</button>
+        `;
+        container.appendChild(div);
+        updateQueryBuilderColumns();
+    });
+
+    document.getElementById('add-where-btn').addEventListener('click', () => {
+        const container = document.getElementById('where-conditions-container');
+        const div = document.createElement('div');
+        div.className = 'where-condition grid grid-cols-12 gap-2 items-center';
+        div.innerHTML = `
+            <select class="where-column-select col-span-4 p-1 border rounded-md bg-white text-xs"><option value="">-- Column --</option></select>
+            <select class="where-operator-select col-span-3 p-1 border rounded-md bg-white text-xs">
+                <option value="=">=</option>
+                <option value="!=">!=</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value="LIKE">LIKE</option>
+            </select>
+            <input type="text" class="where-value-input col-span-4 p-1 border rounded-md text-xs" placeholder="Value">
+            <button class="remove-where-btn text-red-500 hover:text-red-700 text-xs">Remove</button>
+        `;
+        container.appendChild(div);
+        updateQueryBuilderColumns();
+    });
+
     buildSqlQueryBtn.addEventListener('click', async () => {
         if (!state.dbId) {
             showError("Please select a database first.");
@@ -1917,28 +2031,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // When the main 'FROM' table changes
     document.getElementById('from-table-select').addEventListener('change', (e) => {
         const tableName = e.target.value;
-        const selectContainer = document.getElementById('select-columns-container');
-        selectContainer.innerHTML = '';
+        updateQueryBuilderColumns();
+    });
 
-        if (!tableName || !dbDataCache[tableName]) {
-            selectContainer.innerHTML = '<p class="text-sm text-gray-500">Select a table first.</p>';
-            return;
+    // Event delegation for dynamically added elements
+    document.getElementById('sql-builder-modal').addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-join-btn')) {
+            e.target.closest('.join-condition').remove();
+            updateQueryBuilderColumns();
         }
-
-        // Populate the 'SELECT' column checkboxes
-        const tableData = dbDataCache[tableName][0]; // Use first row to get columns
-        if (tableData && tableData.data) {
-            Object.keys(tableData.data).forEach(colName => {
-                const id = `select-col-${tableName}-${colName}`;
-                selectContainer.innerHTML += `
-                    <label for="${id}" class="flex items-center gap-2 p-1 rounded hover:bg-gray-200 cursor-pointer">
-                        <input type="checkbox" id="${id}" data-table="${tableName}" data-column="${colName}" class="h-4 w-4 rounded">
-                        <span class="font-mono text-sm">${tableName}.${colName}</span>
-                    </label>
-                `;
-            });
+        if (e.target.classList.contains('remove-where-btn')) {
+            e.target.closest('.where-condition').remove();
         }
     });
+    document.getElementById('sql-builder-modal').addEventListener('change', (e) => {
+        if (e.target.classList.contains('join-table-select')) {
+            updateQueryBuilderColumns();
+        }
+    });
+
 
     document.getElementById('generate-sql-btn').addEventListener('click', () => {
         const fromTable = document.getElementById('from-table-select').value;
@@ -1947,28 +2058,39 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Collect SELECT columns
+        // 1. Collect SELECT columns
         const selectedCols = [];
         document.querySelectorAll('#select-columns-container input:checked').forEach(cb => {
             selectedCols.push(`"${cb.dataset.table}"."${cb.dataset.column}"`);
         });
         const selectClause = selectedCols.length > 0 ? selectedCols.join(',\n  ') : '*';
 
-        // Collect JOIN clauses
+        // 2. Collect JOIN clauses
         const joinClauses = [];
-        // This part would be implemented when JOIN UI is added
+        document.querySelectorAll('.join-condition').forEach(div => {
+            const joinTable = div.querySelector('.join-table-select').value;
+            const [leftTable, leftCol] = div.querySelector('.join-left-col-select').value.split('.');
+            const [rightTable, rightCol] = div.querySelector('.join-right-col-select').value.split('.');
+            if (joinTable && leftTable && leftCol && rightTable && rightCol) {
+                joinClauses.push(`INNER JOIN "${joinTable}" ON "${leftTable}"."${leftCol}" = "${rightTable}"."${rightCol}"`);
+            }
+        });
 
-        // Collect WHERE clauses
+        // 3. Collect WHERE clauses
         const whereClauses = [];
-        // This part would be implemented when WHERE UI is added
+        document.querySelectorAll('.where-condition').forEach(div => {
+            const [table, column] = (div.querySelector('.where-column-select').value || '').split('.');
+            const operator = div.querySelector('.where-operator-select').value;
+            const value = div.querySelector('.where-value-input').value;
+            if (table && column && operator) {
+                whereClauses.push(`"${table}"."${column}" ${operator} '${value.replace(/'/g, "''")}'`); // Basic SQL injection prevention for strings
+            }
+        });
 
+        // 4. Combine and Display
         let sql = `SELECT\n  ${selectClause}\nFROM\n  "${fromTable}"`;
-        if (joinClauses.length > 0) {
-            sql += `\n${joinClauses.join('\n')}`;
-        }
-        if (whereClauses.length > 0) {
-            sql += `\nWHERE\n  ${whereClauses.join(' AND\n  ')}`;
-        }
+        if (joinClauses.length > 0) sql += `\n${joinClauses.join('\n')}`;
+        if (whereClauses.length > 0) sql += `\nWHERE\n  ` + whereClauses.join(' AND\n  ');
         sql += ';';
 
         document.getElementById('generated-sql-output').value = sql;
@@ -1990,45 +2112,83 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Get data from the FROM table. We need to work with the 'data' property of each row.
-        let results = dbDataCache[fromTable].map(row => row.data);
+        // 1. Get UI State
+        let results = dbDataCache[fromTable].map(row => ({ [fromTable]: row.data }));
 
-        // --- TODO: Implement JOIN logic here ---
-        // This would involve iterating through JOIN conditions and merging data.
+        // 2. Perform Joins (Client-side)
+        document.querySelectorAll('.join-condition').forEach(div => {
+            const joinTable = div.querySelector('.join-table-select').value;
+            const [leftTable, leftCol] = div.querySelector('.join-left-col-select').value.split('.');
+            const [rightTable, rightCol] = div.querySelector('.join-right-col-select').value.split('.');
 
-        // --- TODO: Implement WHERE filtering logic here ---
-        // This would involve filtering the 'results' array based on WHERE conditions.
+            if (!joinTable || !leftTable || !leftCol || !rightTable || !rightCol) return;
 
-        // Get selected columns for the final output
+            let joinedResults = [];
+            const rightData = dbDataCache[joinTable].map(row => ({ [rightTable]: row.data }));
+
+            // Nested loop join
+            results.forEach(leftRow => {
+                rightData.forEach(rightRow => {
+                    if (leftRow[leftTable] && rightRow[rightTable] && leftRow[leftTable][leftCol] == rightRow[rightTable][rightCol]) {
+                        joinedResults.push({ ...leftRow, ...rightRow });
+                    }
+                });
+            });
+            results = joinedResults;
+        });
+
+        // 3. Apply Filters (WHERE clauses)
+        document.querySelectorAll('.where-condition').forEach(div => {
+            const [table, column] = (div.querySelector('.where-column-select').value || '').split('.');
+            const operator = div.querySelector('.where-operator-select').value;
+            const value = div.querySelector('.where-value-input').value;
+
+            if (!table || !column) return;
+
+            results = results.filter(row => {
+                const cellValue = row[table] ? row[table][column] : undefined;
+                if (cellValue === undefined) return false;
+
+                switch (operator) {
+                    case '=': return cellValue == value;
+                    case '!=': return cellValue != value;
+                    case '>': return cellValue > value;
+                    case '<': return cellValue < value;
+                    case 'LIKE': return String(cellValue).toLowerCase().includes(value.toLowerCase());
+                    default: return true;
+                }
+            });
+        });
+
+        // 4. Select Columns
         const selectedCols = [];
         document.querySelectorAll('#select-columns-container input:checked').forEach(cb => {
             selectedCols.push({ table: cb.dataset.table, column: cb.dataset.column });
         });
 
-        // If specific columns are selected, map the results to include only those.
+        let finalResults;
         if (selectedCols.length > 0) {
-            results = results.map(row => {
+            finalResults = results.map(row => {
                 const newRow = {};
                 selectedCols.forEach(sc => {
-                    // For now, this only works for the FROM table. Joins would require more complex logic.
-                    if (sc.table === fromTable) {
-                        newRow[`${sc.table}.${sc.column}`] = row[sc.column];
-                    }
+                    newRow[`${sc.table}.${sc.column}`] = row[sc.table] ? row[sc.table][sc.column] : undefined;
                 });
                 return newRow;
             });
         } else {
-            // If no columns are selected (SELECT *), format the keys to include the table name.
-            results = results.map(row => {
+            // SELECT *
+            finalResults = results.map(row => {
                 const newRow = {};
-                for (const key in row) {
-                    newRow[`${fromTable}.${key}`] = row[key];
+                for (const tableName in row) {
+                    for (const colName in row[tableName]) {
+                        newRow[`${tableName}.${colName}`] = row[tableName][colName];
+                    }
                 }
                 return newRow;
             });
         }
 
-        renderPreviewResults(results);
+        renderPreviewResults(finalResults);
     });
 
     function renderPreviewResults(data) {
