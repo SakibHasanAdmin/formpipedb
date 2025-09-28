@@ -1123,7 +1123,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 return {
                     name: row.querySelector('[data-key="name"]').value,
-                    type: row.querySelector('[data-key="type"]').value,
+                    // --- FIX: If auto-increment is checked, the type MUST be 'serial' for the backend view creation to work. ---
+                    type: row.querySelector('[data-key="is_auto_increment"]').checked 
+                        ? 'serial' 
+                        : row.querySelector('[data-key="type"]').value,
                     is_primary_key: row.querySelector('[data-key="is_primary_key"]').value === 'true',
                     is_auto_increment: row.querySelector('[data-key="is_auto_increment"]').checked,
                     is_not_null: row.querySelector('[data-key="is_not_null"]').checked,
