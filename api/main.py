@@ -369,13 +369,8 @@ async def create_table_by_db_name(db_name: str, table_data: TableCreate, auth_de
         database_id = db_check.data['id']
 
         # 2. Use the existing create_database_table function with the fetched ID.
-        # This avoids duplicating logic. We need to pass the dictionary representation of the model.
+        # This avoids duplicating logic.
         return await create_database_table(database_id, table_data, auth_details)
-
-    except APIError as e:
-        if "user_tables_database_id_name_key" in str(e):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A table with the name '{table_data.name}' already exists in this database.")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not create table: {str(e)}")
     except HTTPException as e:
         # Re-raise HTTPExceptions from called functions
         raise e
@@ -720,10 +715,10 @@ async def update_database_table(table_id: int, table_data: TableUpdate, response
             "columns": [col.dict() for col in table_data.columns]
         }
         db_response = supabase.table("user_tables").update(update_data, returning="representation").eq("id", table_id).execute()
-        if not response.data:
+        if not db_response.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found or access denied.")
         
-        updated_table = response.data[0]
+        updated_table = db_response.data[0]
 
         # --- FIX: Re-create the view to reflect the structure changes ---
         # This is the missing piece. Without this, the SQL Runner's view becomes outdated.
@@ -1419,9 +1414,9 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
         # Pass 4: Insert all data
         for statement in statements:
             if statement.upper().startswith("INSERT INTO"):
-                await _parse_and_execute_insert(statement, created_tables_map, new_db_id, supabase, user)
+                await _parse_and_execute_insert(statement, created_tables_map, new_db_id, supabase, user) # This is already async
         
-        # --- FIX: After all tables and data are imported, create the views for the SQL runner ---
+        # Pass 5: Create all views and then reload the schema ONCE.
         final_tables_res = await get_database_tables(new_db_id, auth_details)
         for table in final_tables_res:
             try:
@@ -1429,12 +1424,12 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
                     'p_table_id': table['id'],
                     'p_database_id': new_db_id,
                     'p_table_name': table['name'],
-                }).execute()
-                # --- FIX: Notify PostgREST to reload its schema cache after creating the view ---
-                supabase.rpc('pgrst_reload_schema').execute()
-
+                }).execute() # Create the view
             except Exception as view_error:
                 print(f"Warning: Could not create view for imported table {table['id']} ({table['name']}): {view_error}")
+        
+        # Now, after all views are created, reload the schema cache a single time.
+        supabase.rpc('pgrst_reload_schema').execute()
 
         return db_response
     except Exception as e:

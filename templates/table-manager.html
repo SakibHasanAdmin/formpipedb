@@ -544,8 +544,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function pollForTableReady(tableId) {
-        const maxRetries = 12; // --- FIX: Increase retries for more patience ---
-        const retryDelay = 750; // ms
+        const maxRetries = 15; // Increased patience for schema cache to update
+        const retryDelay = 1000; // ms
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
@@ -555,10 +555,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response.ok) {
                     console.log(`Table ${tableId} is ready.`);
                     return true; // Table is ready
+                } else if (response.status !== 404) {
+                    // If it's not a 404, it's an unexpected error, stop polling.
+                    throw new Error(await getErrorFromResponse(response));
                 }
             } catch (error) {
-                // A network error or other unexpected issue.
-                // We will still retry a few times.
                 console.warn(`Polling attempt ${attempt} failed, but will retry.`, error);
             }
             
@@ -825,8 +826,7 @@ document.addEventListener('DOMContentLoaded', () => {
             td.className = 'p-1';
             td.dataset.columnName = col.name;
 
-            // --- FIX: Read value directly from the row object, not row.data ---
-            const cellValue = !isNew ? (row[col.name] ?? '') : '';
+            const cellValue = isNew ? '' : (row[col.name] ?? '');
 
             if (col.foreign_key) {
                 const fkInfo = col.foreign_key;
@@ -851,7 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 if (col.is_primary_key) {
                     const input = document.createElement('input');
-                    const isAuto = col.is_auto_increment || (col.type || '').toLowerCase() === 'serial' || col.type === 'INTEGER (PK)';
+                    const isAuto = col.is_auto_increment || (col.type || '').toLowerCase() === 'serial';
                     input.type = 'text';
                     if (isNew && isAuto) {
                         input.value = '(auto)';
@@ -1012,7 +1012,7 @@ document.addEventListener('DOMContentLoaded', () => {
         div.className = 'column-row flex flex-col gap-2 border-t pt-3';
         div.innerHTML = `
             <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                <input type="text" data-key="name" placeholder="column_name" required class="sm:col-span-4 p-2 border rounded-md" ${isPk ? 'value="id"' : ''}>
+                <input type="text" data-key="name" placeholder="column_name" required class="sm:col-span-4 p-2 border rounded-md" ${isPk ? 'value="id" readonly' : ''}>
                 <select data-key="type" class="sm:col-span-3 p-2 border rounded-md bg-white" ${isPk ? 'disabled' : ''}>
                     ${isPk ? '<option value="integer" selected>INTEGER (PK)</option>' : `
                     <option value="text" selected>TEXT</option>
@@ -1025,7 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     `}
                 </select>
                 <div class="sm:col-span-4 flex items-center justify-around text-xs">
-                    <label class="flex flex-col items-center" title="Set this as an auto-incrementing primary key. The type will become SERIAL."><input data-key="is_auto_increment" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked' : 'disabled'}><span>Auto-Inc</span></label>
+                    <label class="flex flex-col items-center" title="Set this as an auto-incrementing primary key. The type will become SERIAL."><input data-key="is_auto_increment" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked disabled' : ''}><span>Auto-Inc</span></label>
                     <label class="flex flex-col items-center"><input data-key="is_not_null" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked disabled' : ''}><span>Not Null</span></label>
                     <label class="flex flex-col items-center"><input data-key="is_unique" type="checkbox" class="h-4 w-4 rounded" ${isPk ? 'checked disabled' : ''}><span>Unique</span></label> 
                 </div>
@@ -1098,9 +1098,6 @@ document.addEventListener('DOMContentLoaded', () => {
         submitCreateTableBtn.disabled = true;
         submitCreateTableBtn.textContent = 'Creating...';
 
-        // --- FIX: Add a pending UI element to prevent early clicks ---
-        const tempTableName = activeTab === 'gui' ? document.getElementById('new-table-name').value.trim() : 'New Table';
-        addPendingTableToSidebar(tempTableName);
         if (activeTab === 'csv') { // The CSV import has its own submit button and logic.
             return;
         } else if (activeTab === 'gui') {
@@ -1123,9 +1120,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 return {
                     name: row.querySelector('[data-key="name"]').value,
-                    // --- FIX: If auto-increment is checked, the type MUST be 'serial' for the backend view creation to work. ---
-                    type: row.querySelector('[data-key="is_auto_increment"]').checked 
-                        ? 'serial' 
+                    type: row.querySelector('[data-key="is_auto_increment"]').checked
+                        ? 'serial'
                         : row.querySelector('[data-key="type"]').value,
                     is_primary_key: row.querySelector('[data-key="is_primary_key"]').value === 'true',
                     is_auto_increment: row.querySelector('[data-key="is_auto_increment"]').checked,
@@ -1138,7 +1134,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } else { // activeTab === 'sql' // This endpoint still requires an ID. Ensure it's available.
             if (!state.dbId) throw new Error("Database ID not loaded. Cannot create table from SQL."); // This endpoint still requires an ID. Ensure it's available.
- 
+            
+            // For SQL import, we need to extract the table name to pass to the API
+            const createMatch = document.getElementById('create-table-sql-input').value.trim().match(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"]?(\w+)[`"]?/i);
+            const sqlTableName = createMatch ? createMatch[1] : 'new_sql_table';
             const sqlScript = document.getElementById('create-table-sql-input').value.trim();
             url = `/api/v1/databases/${state.dbId}/create-table-from-sql`;
             payload = { name: "default_name_from_sql_tab", script: sqlScript };
@@ -1174,6 +1173,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             showError(error.message, error);
+            await fetchDbIdAndTables(); // Refresh the list to remove any pending indicators
         } finally {
             submitCreateTableBtn.disabled = false;
             submitCreateTableBtn.textContent = 'Create Table';
@@ -1989,10 +1989,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const typeSelect = row.querySelector('[data-key="type"]');
             if (isChecked) {
                 typeSelect.innerHTML = '<option value="serial" selected>SERIAL</option>';
-                typeSelect.disabled = true;
+                typeSelect.disabled = true; // The type must be serial for auto-increment
             } else {
-                typeSelect.innerHTML = '<option value="integer" selected>INTEGER</option>'; // Or restore previous options
-                typeSelect.disabled = false;
+                // Restore the default options if unchecked
+                typeSelect.innerHTML = `<option value="text" selected>TEXT</option><option value="integer">INTEGER</option><option value="real">REAL</option><option value="boolean">BOOLEAN</option><option value="timestamp">TIMESTAMP</option><option value="date">DATE</option><option value="jsonb">JSONB</option>`;
+                typeSelect.disabled = false; // Re-enable the select
             }
         }
         // FK table select
