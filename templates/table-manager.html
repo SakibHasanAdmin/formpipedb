@@ -416,6 +416,75 @@
                 </div>
             </div>
         </div>
+    
+                <div class="p-4 border-t space-y-2 overflow-hidden"></div>
+            <button id="view-db-sql-sidebar-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v5c0 2.21 3.582 4 8 4s8-1.79 8-4V7"></path></svg><span class="sidebar-item-title">View DB SQL</span></button>
+            <button id="open-query-builder-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-teal-600 text-white hover:bg-teal-700 font-semibold"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z"></path></svg><span class="sidebar-item-title">Query Builder</span></button>
+            <button id="delete-table-btn" class="w-full flex items-center justify-center gap-2 p-2 rounded-md bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg><span class="sidebar-item-title">Delete Table</span></button>
+        </div>
+        <div class="p-2 border-t">
+            <button id="toggle-sidebar-btn" class="w-full flex items-center justify-center p-2 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800">
+
+    </div>
+</div>
+
+<div id="query-builder-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0 z-40">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b flex justify-between items-center">
+            <h3 class="text-xl font-semibold">Query Builder</h3>
+            <button id="close-query-builder-btn" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+            <!-- Builder Controls -->
+            <div class="w-full md:w-1/3 lg:w-1/4 p-4 border-b md:border-b-0 md:border-r bg-gray-50 overflow-y-auto">
+                <div class="space-y-4">
+                    <!-- FROM -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">FROM</label>
+                        <select id="qb-from-table" class="w-full p-2 border rounded-md bg-white text-sm">
+                            <option value="">-- Select a table --</option>
+                        </select>
+                    </div>
+                    <!-- JOINS -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">JOINS</label>
+                        <div id="qb-joins-container" class="space-y-2"></div>
+                        <button id="qb-add-join-btn" type="button" class="text-xs text-blue-600 hover:underline mt-2 font-semibold">+ Add Join</button>
+                    </div>
+                    <!-- WHERE -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">WHERE</label>
+                        <div id="qb-where-container" class="space-y-2"></div>
+                        <button id="qb-add-where-btn" type="button" class="text-xs text-blue-600 hover:underline mt-2 font-semibold">+ Add Condition</button>
+                    </div>
+                    <!-- SELECT -->
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">SELECT</label>
+                        <div id="qb-select-container" class="p-2 border rounded-md bg-white max-h-40 overflow-y-auto text-sm space-y-1">
+                            <!-- Column checkboxes will be injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Results -->
+            <div class="flex-1 p-4 flex flex-col overflow-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h4 class="text-lg font-semibold">Results</h4>
+                    <div class="flex gap-2">
+                        <button id="qb-run-query-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold" disabled>Run Query</button>
+                    </div>
+                </div>
+                <div id="qb-results-wrapper" class="bg-white rounded-lg shadow-sm border overflow-auto flex-1 relative">
+                    <div id="qb-results-placeholder" class="absolute inset-0 flex items-center justify-center text-gray-500">
+                        Build and run a query to see results.
+                    </div>
+                    <table class="min-w-full text-sm hidden">
+                        <thead id="qb-results-header" class="bg-gray-50 sticky top-0 z-10"></thead>
+                        <tbody id="qb-results-tbody" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -495,9 +564,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSummaryModalBtn = document.getElementById('close-summary-modal-btn');
     const sidebar = document.getElementById('sidebar');
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
-    const openQueryBuilderBtn = document.getElementById('open-query-builder-btn');
-    const queryBuilderModal = document.getElementById('query-builder-modal');
-    const closeQueryBuilderBtn = document.getElementById('close-query-builder-btn');
+    const openQueryBuilderBtn = document.getElementById('open-query-builder-btn'); // --- FIX: Duplicate ID ---
+    const queryBuilderModal = Array.from(document.querySelectorAll('#query-builder-modal')).pop(); // --- FIX: Select the last one ---
+    const closeQueryBuilderBtn = queryBuilderModal.querySelector('#close-query-builder-btn'); // --- FIX: Scope to modal ---
+
     
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
