@@ -17,6 +17,7 @@ from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from supabase import create_client, Client
 from postgrest import APIError
+from psycopg2 import sql
 
 # It's a good practice to load environment variables at the start
 # In a real app, you'd use a library like python-dotenv for local development
@@ -137,6 +138,26 @@ class SqlImportRequest(BaseModel):
 class SqlTableCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     script: str
+
+# --- Query Builder Models ---
+class QBJoin(BaseModel):
+    type: str # e.g., 'INNER', 'LEFT'
+    target_table_name: str
+    on_column_from: str
+    on_column_to: str
+
+class QBWhere(BaseModel):
+    column: str
+    operator: str
+    value: Any
+
+class QBRequest(BaseModel):
+    from_table: str
+    select_columns: List[str]
+    joins: List[QBJoin] = Field(default_factory=list)
+    where_conditions: List[QBWhere] = Field(default_factory=list)
+    db_name: str
+
 
 # --- FIX: Conditionally use EmailStr to prevent crash if 'email-validator' is not installed ---
 try:
@@ -1320,6 +1341,105 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
         if new_db_id:
             await delete_user_database(new_db_id, auth_details)
         raise HTTPException(status_code=400, detail=f"Failed to import SQL script: {str(e)}. The new database has been rolled back.")
+
+@app.post("/api/v1/query-builder/execute")
+async def execute_query_builder_query(qb_request: QBRequest, auth_details: dict = Depends(get_current_user_details)):
+    """
+    Securely builds and executes a read-only SQL query from the Query Builder UI.
+    """
+    supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    user = auth_details["user"]
+
+    # 1. Get all tables for the user's database to validate against
+    try:
+        db_res = supabase_admin.table("user_databases").select("id, user_tables(id, name, columns)").eq("name", qb_request.db_name).eq("user_id", user.id).single().execute()
+        if not db_res.data:
+            raise HTTPException(status_code=404, detail=f"Database '{qb_request.db_name}' not found.")
+    except APIError as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching database metadata: {e.message}")
+
+    all_tables = db_res.data.get('user_tables', [])
+    table_map = {t['name']: t for t in all_tables}
+
+    # 2. Validate all table and column names in the request
+    all_involved_tables = {qb_request.from_table} | {j.target_table_name for j in qb_request.joins}
+    for table_name in all_involved_tables:
+        if table_name not in table_map:
+            raise HTTPException(status_code=400, detail=f"Invalid table in query: '{table_name}'")
+
+    all_involved_columns = set(qb_request.select_columns)
+    for j in qb_request.joins:
+        all_involved_columns.add(j.on_column_from)
+        all_involved_columns.add(j.on_column_to)
+    for w in qb_request.where_conditions:
+        all_involved_columns.add(w.column)
+
+    for col_name in all_involved_columns:
+        # Column names can be in format "table.column" or just "column"
+        parts = col_name.split('.')
+        table_name = parts[0] if len(parts) > 1 else qb_request.from_table
+        column_name = parts[1] if len(parts) > 1 else parts[0]
+
+        if table_name not in table_map:
+            raise HTTPException(status_code=400, detail=f"Table '{table_name}' referenced in column '{col_name}' not found.")
+        
+        table_cols = [c['name'] for c in table_map[table_name]['columns']]
+        if column_name not in table_cols:
+            raise HTTPException(status_code=400, detail=f"Column '{column_name}' not found in table '{table_name}'.")
+
+    # 3. Build the SQL query using psycopg2.sql for safety
+    params = []
+    
+    # SELECT
+    select_cols = [sql.SQL("{}.{}").format(sql.Identifier(c.split('.')[0]), sql.Identifier(c.split('.')[1])) for c in qb_request.select_columns]
+    query = sql.SQL("SELECT {cols} FROM {main_table}").format(
+        cols=sql.SQL(', ').join(select_cols),
+        main_table=sql.Identifier(qb_request.from_table)
+    )
+
+    # JOINS
+    if qb_request.joins:
+        join_clauses = []
+        for join in qb_request.joins:
+            join_type = sql.SQL(join.type.upper() + " JOIN")
+            from_table, from_col = join.on_column_from.split('.')
+            to_table, to_col = join.on_column_to.split('.')
+            
+            join_clauses.append(sql.SQL("{join_type} {target_table} ON {from_table}.{from_col} = {to_table}.{to_col}").format(
+                join_type=join_type,
+                target_table=sql.Identifier(join.target_table_name),
+                from_table=sql.Identifier(from_table),
+                from_col=sql.Identifier(from_col),
+                to_table=sql.Identifier(to_table),
+                to_col=sql.Identifier(to_col)
+            ))
+        query += sql.SQL(' ') + sql.SQL(' ').join(join_clauses)
+
+    # WHERE
+    if qb_request.where_conditions:
+        where_clauses = []
+        for cond in qb_request.where_conditions:
+            table_name, col_name = cond.column.split('.')
+            where_clauses.append(sql.SQL("{table}.{col} {op} %s").format(
+                table=sql.Identifier(table_name),
+                col=sql.Identifier(col_name),
+                op=sql.SQL(cond.operator)
+            ))
+            params.append(cond.value)
+        query += sql.SQL(" WHERE ") + sql.SQL(" AND ").join(where_clauses)
+
+    query += sql.SQL(" LIMIT 100") # Add a limit to prevent large queries
+
+    # 4. Execute the query
+    try:
+        # We use the admin client's connection pool to execute a raw query
+        with supabase_admin.functions.client.pool.getconn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query.as_string(conn), tuple(params))
+                results = [dict(zip([desc[0] for desc in cur.description], row)) for row in cur.fetchall()]
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Query execution failed: {str(e)}")
 
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)

@@ -565,10 +565,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebar = document.getElementById('sidebar');
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
     const openQueryBuilderBtn = document.getElementById('open-query-builder-btn'); // --- FIX: Duplicate ID ---
-    const queryBuilderModal = Array.from(document.querySelectorAll('#query-builder-modal')).pop(); // --- FIX: Select the last one ---
-    const closeQueryBuilderBtn = queryBuilderModal.querySelector('#close-query-builder-btn'); // --- FIX: Scope to modal ---
+    const queryBuilderModal = document.getElementById('query-builder-modal');
+    const closeQueryBuilderBtn = document.getElementById('close-query-builder-btn');
 
-    
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
     let initialDataLoaded = false;
@@ -652,107 +651,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Data Fetching and Rendering ---
-
-    /**
-     * Fetches the database ID and its tables. Includes a retry mechanism to handle
-     * potential database replication lag immediately after creation.
-     */
-    async function fetchDbIdAndTables() {
-        const maxRetries = 5;
-        const retryDelay = 750; // ms
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                // Fetch the database and its tables in a single API call.
-                const dbResponse = await fetchWithAuth(`/api/v1/databases/by-name/${encodeURIComponent(state.dbName)}`);
-
-                if (dbResponse.status === 404 && attempt < maxRetries) {
-                    console.log(`Attempt ${attempt}: Database not found, retrying in ${retryDelay}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, retryDelay));
-                    continue;
-                }
-
-                if (!dbResponse.ok) {
-                    throw new Error(await getErrorFromResponse(dbResponse));
-                }
-
-                const dbWithTables = await dbResponse.json();
-                if (!dbWithTables) throw new Error(`Database '${state.dbName}' could not be loaded.`);
-                
-                // The API response now includes the tables under the `user_tables` key.
-                state.dbId = dbWithTables.id;
-                state.tables = dbWithTables.user_tables || [];
-                renderTables(state.tables);
-                initialDataLoaded = true;
-                return; // Exit the function successfully.
-
-            } catch (error) {
-                // If it's the last attempt, show the error.
-                if (attempt === maxRetries) {
-                    showError(`Failed to load database after ${maxRetries} attempts: ${error.message}`, error);
-                }
-            }
-        }
-
-        // If the loop finishes without success, show a final error state in the UI.
-        if (!initialDataLoaded) {
-            tableList.innerHTML = `<p class="text-sm text-red-500 p-2">Error loading tables.</p>`;
-            createTableBtn.disabled = true;
-            createTableBtn.title = "Cannot create table: failed to load database details.";
-            placeholderContent.textContent = `Error: Could not load database '${state.dbName}'. It may not exist or you may not have access.`; // Allow a retry on the next auth event
-        }
-    }
-
-    function renderTables(tables) {
-        tableList.innerHTML = '';
-        if (tables.length === 0) {
-            tableList.innerHTML = `<p class="text-sm text-gray-500 p-2">No tables yet.</p>`;
-            return;
-        }
-        tables.forEach(table => {
-            const tableLink = document.createElement('a');
-            tableLink.href = '#';
-            tableLink.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-100';
-            tableLink.textContent = table.name;
-            tableLink.dataset.tableId = table.id;
-            tableList.appendChild(tableLink);
-        });
-    }
-
-    async function cacheForeignKeyData(table) {
-        if (!table || !table.columns) return;
-        
-        state.fkDataCache = {};
-
-        const fkColumns = table.columns.filter(c => c.foreign_key);
-        for (const col of fkColumns) {
-            const fkInfo = col.foreign_key;
-            const referencedTableId = fkInfo.table_id;
-
-            if (state.fkDataCache[referencedTableId]) continue;
-
-            try {
-                const response = await fetchWithAuth(`/api/v1/tables/${referencedTableId}/all-rows`);
-                if (!response.ok) throw new Error(`Failed to fetch data for FK table ${referencedTableId}`);
-                const rows = await response.json();
-                
-                const referencedTable = state.tables.find(t => t.id === referencedTableId);
-                if (!referencedTable) throw new Error(`Could not find metadata for referenced table ${referencedTableId}`);
-                
-                const pkColumn = referencedTable.columns.find(c => c.is_primary_key);
-                if (!pkColumn) throw new Error(`Referenced table ${referencedTableId} has no primary key.`);
-
-                state.fkDataCache[referencedTableId] = {
-                    rows: rows,
-                    pkColumn: pkColumn.name,
-                    displayColumn: fkInfo.column_name
-                };
-            } catch (error) {
-                console.error(`Error caching FK data for table ${referencedTableId}:`, error);
-                state.fkDataCache[referencedTableId] = { rows: [], error: error.message };
-            }
-        }
-    }
 
     async function handleTableSelect(e) {
         if (e.target.tagName === 'A') {
@@ -1916,6 +1814,226 @@ document.addEventListener('DOMContentLoaded', () => {
         validateCreateTableForm(); // Re-validate when a new column is added
     });
 
+    // --- Query Builder Logic ---
+    function initializeQueryBuilder() {
+        const fromTableSelect = document.getElementById('qb-from-table');
+        fromTableSelect.innerHTML = '<option value="">-- Select a table --</option>';
+        state.tables.forEach(table => {
+            fromTableSelect.innerHTML += `<option value="${table.name}">${table.name}</option>`;
+        });
+
+        document.getElementById('qb-joins-container').innerHTML = '';
+        document.getElementById('qb-where-container').innerHTML = '';
+        document.getElementById('qb-select-container').innerHTML = '';
+        document.getElementById('qb-run-query-btn').disabled = true;
+        
+        // Reset results
+        document.getElementById('qb-results-placeholder').classList.remove('hidden');
+        document.querySelector('#qb-results-wrapper table').classList.add('hidden');
+        document.getElementById('qb-results-header').innerHTML = '';
+        document.getElementById('qb-results-tbody').innerHTML = '';
+    }
+
+    function updateQbSelectableColumns() {
+        const fromTable = document.getElementById('qb-from-table').value;
+        const selectContainer = document.getElementById('qb-select-container');
+        selectContainer.innerHTML = '';
+
+        if (!fromTable) return;
+
+        const tablesInQuery = new Map();
+        tablesInQuery.set(fromTable, state.tables.find(t => t.name === fromTable));
+
+        document.querySelectorAll('.qb-join-row').forEach(row => {
+            const joinTable = row.querySelector('.qb-join-table').value;
+            if (joinTable) {
+                tablesInQuery.set(joinTable, state.tables.find(t => t.name === joinTable));
+            }
+        });
+
+        tablesInQuery.forEach((table, tableName) => {
+            if (!table) return;
+            table.columns.forEach(col => {
+                const colIdentifier = `${tableName}.${col.name}`;
+                selectContainer.innerHTML += `
+                    <label class="flex items-center">
+                        <input type="checkbox" class="qb-select-col h-4 w-4 rounded mr-2" value="${colIdentifier}" checked>
+                        ${colIdentifier}
+                    </label>
+                `;
+            });
+        });
+    }
+
+    function addJoinRow() {
+        const container = document.getElementById('qb-joins-container');
+        const div = document.createElement('div');
+        div.className = 'qb-join-row grid grid-cols-1 gap-1 p-2 border rounded-md bg-gray-100';
+        
+        const tableOptions = state.tables.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+
+        div.innerHTML = `
+            <div class="flex items-center gap-1">
+                <select class="qb-join-type p-1 text-xs border rounded-md w-1/3">
+                    <option>INNER</option><option>LEFT</option>
+                </select>
+                <select class="qb-join-table p-1 text-xs border rounded-md w-2/3">
+                    <option value="">-- Join Table --</option>${tableOptions}
+                </select>
+                <button type="button" class="qb-remove-row-btn text-red-500 hover:text-red-700 text-xs">&times;</button>
+            </div>
+            <div class="flex items-center gap-1 text-xs">
+                <span class="font-bold">ON</span>
+                <select class="qb-join-col-from p-1 text-xs border rounded-md flex-1" disabled><option>-- col --</option></select>
+                <span>=</span>
+                <select class="qb-join-col-to p-1 text-xs border rounded-md flex-1" disabled><option>-- col --</option></select>
+            </div>
+        `;
+        container.appendChild(div);
+    }
+
+    function addWhereRow() {
+        const container = document.getElementById('qb-where-container');
+        const div = document.createElement('div');
+        div.className = 'qb-where-row grid grid-cols-12 gap-1 items-center';
+        div.innerHTML = `
+            <select class="qb-where-col col-span-5 p-1 text-xs border rounded-md" disabled><option>-- col --</option></select>
+            <select class="qb-where-op col-span-3 p-1 text-xs border rounded-md">
+                <option>=</option><option>!=</option><option>&gt;</option><option>&lt;</option><option>&gt;=</option><option>&lt;=</option><option>LIKE</option>
+            </select>
+            <input type="text" class="qb-where-val col-span-3 p-1 text-xs border rounded-md" placeholder="value">
+            <button type="button" class="qb-remove-row-btn text-red-500 hover:text-red-700 text-xs col-span-1">&times;</button>
+        `;
+        container.appendChild(div);
+        updateQbWhereColumnOptions();
+    }
+
+    function updateQbWhereColumnOptions() {
+        const fromTable = document.getElementById('qb-from-table').value;
+        if (!fromTable) return;
+
+        const tablesInQuery = new Map();
+        tablesInQuery.set(fromTable, state.tables.find(t => t.name === fromTable));
+        document.querySelectorAll('.qb-join-row').forEach(row => {
+            const joinTable = row.querySelector('.qb-join-table').value;
+            if (joinTable) tablesInQuery.set(joinTable, state.tables.find(t => t.name === joinTable));
+        });
+
+        let colOptions = '';
+        tablesInQuery.forEach((table, tableName) => {
+            if (!table) return;
+            table.columns.forEach(col => {
+                colOptions += `<option value="${tableName}.${col.name}">${tableName}.${col.name}</option>`;
+            });
+        });
+
+        document.querySelectorAll('.qb-where-col').forEach(select => {
+            const currentVal = select.value;
+            select.innerHTML = `<option value="">-- col --</option>${colOptions}`;
+            select.value = currentVal;
+            select.disabled = false;
+        });
+    }
+
+    async function runQueryBuilderQuery() {
+        const runBtn = document.getElementById('qb-run-query-btn');
+        runBtn.disabled = true;
+        runBtn.textContent = 'Running...';
+
+        const fromTable = document.getElementById('qb-from-table').value;
+        const selectedCols = Array.from(document.querySelectorAll('.qb-select-col:checked')).map(cb => cb.value);
+
+        const joins = Array.from(document.querySelectorAll('.qb-join-row')).map(row => ({
+            type: row.querySelector('.qb-join-type').value,
+            target_table_name: row.querySelector('.qb-join-table').value,
+            on_column_from: row.querySelector('.qb-join-col-from').value,
+            on_column_to: row.querySelector('.qb-join-col-to').value,
+        }));
+
+        const whereConditions = Array.from(document.querySelectorAll('.qb-where-row')).map(row => ({
+            column: row.querySelector('.qb-where-col').value,
+            operator: row.querySelector('.qb-where-op').value,
+            value: row.querySelector('.qb-where-val').value,
+        })).filter(w => w.column && w.value);
+
+        if (!fromTable || selectedCols.length === 0) {
+            showError("You must select a 'FROM' table and at least one 'SELECT' column.");
+            runBtn.disabled = false;
+            runBtn.textContent = 'Run Query';
+            return;
+        }
+
+        const payload = {
+            from_table: fromTable,
+            select_columns: selectedCols,
+            joins: joins.filter(j => j.target_table_name && j.on_column_from && j.on_column_to),
+            where_conditions: whereConditions,
+            db_name: state.dbName
+        };
+
+        try {
+            const response = await fetchWithAuth('/api/v1/query-builder/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) throw new Error(await getErrorFromResponse(response));
+
+            const results = await response.json();
+            renderQueryBuilderResults(results);
+
+        } catch (error) {
+            showError(`Query failed: ${error.message}`, error);
+            // Clear results on error
+            document.getElementById('qb-results-placeholder').classList.remove('hidden');
+            document.querySelector('#qb-results-wrapper table').classList.add('hidden');
+            document.getElementById('qb-results-header').innerHTML = '';
+            document.getElementById('qb-results-tbody').innerHTML = '';
+        } finally {
+            runBtn.disabled = false;
+            runBtn.textContent = 'Run Query';
+        }
+    }
+
+    function renderQueryBuilderResults(results) {
+        const placeholder = document.getElementById('qb-results-placeholder');
+        const table = document.querySelector('#qb-results-wrapper table');
+        const thead = document.getElementById('qb-results-header');
+        const tbody = document.getElementById('qb-results-tbody');
+
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        if (!results || results.length === 0) {
+            placeholder.textContent = 'Query ran successfully, but returned no results.';
+            placeholder.classList.remove('hidden');
+            table.classList.add('hidden');
+            return;
+        }
+
+        placeholder.classList.add('hidden');
+        table.classList.remove('hidden');
+
+        const headers = Object.keys(results[0]);
+        const headerRow = thead.insertRow();
+        headers.forEach(h => {
+            const th = document.createElement('th');
+            th.className = 'p-3 text-left font-semibold';
+            th.textContent = h;
+            headerRow.appendChild(th);
+        });
+
+        results.forEach(row => {
+            const tr = tbody.insertRow();
+            headers.forEach(h => {
+                const td = tr.insertCell();
+                td.className = 'p-3';
+                td.textContent = row[h];
+            });
+        });
+    }
+
     // --- App Initialization ---
     
     // Check for saved sidebar state on load
@@ -1938,6 +2056,107 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+    /**
+     * Fetches the database ID and its tables. Includes a retry mechanism to handle
+     * potential database replication lag immediately after creation.
+     */
+    async function fetchDbIdAndTables() {
+        const maxRetries = 5;
+        const retryDelay = 750; // ms
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // Fetch the database and its tables in a single API call.
+                const dbResponse = await fetchWithAuth(`/api/v1/databases/by-name/${encodeURIComponent(state.dbName)}`);
+
+                if (dbResponse.status === 404 && attempt < maxRetries) {
+                    console.log(`Attempt ${attempt}: Database not found, retrying in ${retryDelay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    continue;
+                }
+
+                if (!dbResponse.ok) {
+                    throw new Error(await getErrorFromResponse(dbResponse));
+                }
+
+                const dbWithTables = await dbResponse.json();
+                if (!dbWithTables) throw new Error(`Database '${state.dbName}' could not be loaded.`);
+                
+                // The API response now includes the tables under the `user_tables` key.
+                state.dbId = dbWithTables.id;
+                state.tables = dbWithTables.user_tables || [];
+                renderTables(state.tables);
+                initialDataLoaded = true;
+                return; // Exit the function successfully.
+
+            } catch (error) {
+                // If it's the last attempt, show the error.
+                if (attempt === maxRetries) {
+                    showError(`Failed to load database after ${maxRetries} attempts: ${error.message}`, error);
+                }
+            }
+        }
+
+        // If the loop finishes without success, show a final error state in the UI.
+        if (!initialDataLoaded) {
+            tableList.innerHTML = `<p class="text-sm text-red-500 p-2">Error loading tables.</p>`;
+            createTableBtn.disabled = true;
+            createTableBtn.title = "Cannot create table: failed to load database details.";
+            placeholderContent.textContent = `Error: Could not load database '${state.dbName}'. It may not exist or you may not have access.`; // Allow a retry on the next auth event
+        }
+    }
+
+    function renderTables(tables) {
+        tableList.innerHTML = '';
+        if (tables.length === 0) {
+            tableList.innerHTML = `<p class="text-sm text-gray-500 p-2">No tables yet.</p>`;
+            return;
+        }
+        tables.forEach(table => {
+            const tableLink = document.createElement('a');
+            tableLink.href = '#';
+            tableLink.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-100';
+            tableLink.textContent = table.name;
+            tableLink.dataset.tableId = table.id;
+            tableList.appendChild(tableLink);
+        });
+    }
+
+    async function cacheForeignKeyData(table) {
+        if (!table || !table.columns) return;
+        
+        state.fkDataCache = {};
+
+        const fkColumns = table.columns.filter(c => c.foreign_key);
+        for (const col of fkColumns) {
+            const fkInfo = col.foreign_key;
+            const referencedTableId = fkInfo.table_id;
+
+            if (state.fkDataCache[referencedTableId]) continue;
+
+            try {
+                const response = await fetchWithAuth(`/api/v1/tables/${referencedTableId}/all-rows`);
+                if (!response.ok) throw new Error(`Failed to fetch data for FK table ${referencedTableId}`);
+                const rows = await response.json();
+                
+                const referencedTable = state.tables.find(t => t.id === referencedTableId);
+                if (!referencedTable) throw new Error(`Could not find metadata for referenced table ${referencedTableId}`);
+                
+                const pkColumn = referencedTable.columns.find(c => c.is_primary_key);
+                if (!pkColumn) throw new Error(`Referenced table ${referencedTableId} has no primary key.`);
+
+                state.fkDataCache[referencedTableId] = {
+                    rows: rows,
+                    pkColumn: pkColumn.name,
+                    displayColumn: fkInfo.column_name
+                };
+            } catch (error) {
+                console.error(`Error caching FK data for table ${referencedTableId}:`, error);
+                state.fkDataCache[referencedTableId] = { rows: [], error: error.message };
+            }
+        }
+    }
 </script>
 
 </body>
