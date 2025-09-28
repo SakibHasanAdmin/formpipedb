@@ -427,7 +427,6 @@
                 window.location.href = '/login';
             });
 
-            // Initial Load
             supabase.auth.onAuthStateChange(async (event, session) => {
                 if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
                     if (session) {
@@ -457,10 +456,8 @@
                         } catch (error) {
                             console.error("Could not fetch subscription status:", error);
                         }
-                        // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
-                        if (!initialDataLoaded) {
-                            fetchDatabases();
-                        }
+                        // Fetch data only after a valid session is confirmed.
+                        fetchDatabases();
                     } else {
                         window.location.href = '/login';
                     }
