@@ -790,7 +790,8 @@ document.addEventListener('DOMContentLoaded', () => {
             td.className = 'p-1';
             td.dataset.columnName = col.name;
 
-            const cellValue = !isNew && row.data ? (row.data[col.name] ?? '') : '';
+            // --- FIX: Read value directly from the row object, not row.data ---
+            const cellValue = !isNew ? (row[col.name] ?? '') : '';
 
             if (col.foreign_key) {
                 const fkInfo = col.foreign_key;
@@ -801,8 +802,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     select.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 fk-select';
                     select.innerHTML = '<option value="">-- Select --</option>';
                     cacheEntry.rows.forEach(fkRow => {
-                        const optionValue = fkRow.data[cacheEntry.pkColumn] ?? fkRow.id;
-                        const optionText = fkRow.data[cacheEntry.displayColumn] ?? `(ID: ${optionValue})`;
+                        const optionValue = fkRow[cacheEntry.pkColumn] ?? fkRow.id;
+                        const optionText = fkRow[cacheEntry.displayColumn] ?? `(ID: ${optionValue})`;
                         const option = new Option(optionText, optionValue);
                         if (optionValue == cellValue) option.selected = true;
                         select.add(option);

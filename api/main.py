@@ -780,33 +780,23 @@ async def get_table_rows(
     """
     supabase = auth_details["client"]
     try:
-        # 1. Get the table schema to find the user-defined primary key column name
-        table_schema_dict = await get_single_table(table_id, auth_details)
-        # When calling an endpoint function directly, it returns a dict, not a Pydantic model.
-        # We must convert it to a model to use attribute access.
-        table_schema_obj = TableResponse(**table_schema_dict)
-        pk_col_name = next((col.name for col in table_schema_obj.columns if col.is_primary_key), None)
-        # --- FIX: Check if the primary key is auto-incrementing ---
-        pk_is_auto_increment = False
-        if pk_col_name:
-            pk_is_auto_increment = next((col.is_auto_increment for col in table_schema_obj.columns if col.name == pk_col_name), False)
-
-        # 2. Build the query
-        query = supabase.table("table_rows").select("*", count='exact').eq("table_id", table_id)
+        # --- FIX: Query the user-specific view, not the base table_rows ---
+        # The view `user_table_view_{id}` correctly projects the row's internal `id`
+        # as the user-defined primary key column. This is the correct source of truth.
+        view_name = f"user_table_view_{table_id}"
+        query = supabase.from_(view_name).select("*", count='exact')
 
         if search:
-            # Search across all non-pk columns by casting their JSONB value to text
-            searchable_columns = [col.name for col in table_schema_obj.columns if not col.is_primary_key]
-            if searchable_columns:
-                or_filter = ",".join([f"data->>{col}.ilike.%{search}%" for col in searchable_columns])
-                query = query.or_(or_filter)
+            # The view exposes all columns as top-level, so we can search them directly.
+            # We need the schema to know which columns to search.
+            table_schema_dict = await get_single_table(table_id, auth_details)
+            table_schema_obj = TableResponse(**table_schema_dict)
+            searchable_columns = [col.name for col in table_schema_obj.columns]
+            or_filter = ",".join([f'"{col}".ilike.%{search}%' for col in searchable_columns])
+            query = query.or_(or_filter)
 
-        # RLS on table_rows ensures user can only access rows they own.
         response = query.order("id").range(offset, offset + limit - 1).execute()
 
-        # The view `user_table_view_{id}` (which is what `table_rows` points to via RLS)
-        # correctly handles casting the internal row ID to the user's PK name.
-        # No further processing is needed. We can return the data as-is.
         return {"total": response.count, "data": response.data or []}
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -819,18 +809,11 @@ async def get_all_table_rows(table_id: int, auth_details: dict = Depends(get_cur
     """
     try:
         supabase = auth_details["client"]
-        # 1. Get the table schema to find the user-defined primary key column name
-        table_schema_dict = await get_single_table(table_id, auth_details)
-        table_schema_obj = TableResponse(**table_schema_dict)
-        pk_col = next((col for col in table_schema_obj.columns if col.is_primary_key), None)
-        pk_col_name = pk_col.name if pk_col else None
-        pk_is_auto_increment = pk_col.is_auto_increment if pk_col else False
-
-        # RLS on table_rows ensures user can only access rows they own.
-        response = supabase.table("table_rows").select("*").eq("table_id", table_id).order("id").execute()
-
-        # The view `user_table_view_{id}` correctly casts the internal row ID to the user's PK name.
-        # No further processing is needed. We can return the data as-is.
+        # --- FIX: Query the user-specific view to get all columns, including the projected PK ---
+        view_name = f"user_table_view_{table_id}"
+        # The view is protected by RLS on the underlying tables, so this is secure.
+        response = supabase.from_(view_name).select("*").order("id").execute()
+        
         return response.data
 
     except APIError as e:
@@ -1153,19 +1136,19 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
         create_statement += "\n);\n\n"
         sql_script += create_statement
 
-        # Fetch raw rows directly to avoid incorrect PK injection from other helpers.
-        # RLS on table_rows ensures user can only access rows they own.
-        raw_rows_res = supabase.table("table_rows").select("data").eq("table_id", table.id).order("id").execute()
+        # --- FIX: Fetch rows from the user-specific view to get all columns correctly ---
+        view_name = f"user_table_view_{table.id}"
+        raw_rows_res = supabase.from_(view_name).select("*").order("id").execute()
 
         if raw_rows_res.data and isinstance(raw_rows_res.data, list):
             sql_script += f"-- Data for table: {table.name}\n"
             for row in raw_rows_res.data:
-                row_data = row.get('data')
+                row_data = row
                 if not row_data:
                     continue
 
                 pk_col = next((col for col in table.columns if col.is_primary_key), None)
-                # Treat 'serial' type as auto-incrementing as well
+                # --- FIX: Treat 'serial' type as auto-incrementing as well ---
                 pk_is_auto_increment = (pk_col.is_auto_increment or (pk_col.type or '').lower() == 'serial') if pk_col else False
                 
                 columns_to_insert = [f'"{k}"' for k, v in row_data.items() if not (pk_is_auto_increment and k == pk_col.name)]
