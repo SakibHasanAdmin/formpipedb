@@ -1146,13 +1146,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorDetail);
             }
             closeModal(createTableModal);
-
-            // --- FIX: Poll for the table's view to be ready before proceeding ---
+            
+            // Poll for the table's view to be ready before proceeding.
             // This prevents race conditions where the UI tries to fetch data from a view
             // that hasn't been created or recognized by PostgREST yet.
             const newTable = await response.json();
             const isReady = await pollForTableReady(newTable.id);
-
+            
             if (isReady) {
                 await fetchDbIdAndTables();
                 // Auto-select the newly created table
@@ -1161,7 +1161,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     newTableLink.click();
                 }
             } else {
-                // If polling fails, just refresh the list. The user can click the table manually.
                 await fetchDbIdAndTables();
             }
         } catch (error) {
@@ -1554,8 +1553,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } 
                 closeModal(createTableModal);
                 const newTable = await response.json();
-
-                // --- FIX: Poll for the table's view to be ready before proceeding ---
+                
+                // Poll for the table's view to be ready before proceeding.
                 const isReady = await pollForTableReady(newTable.id);
                 if (isReady) {
                     await fetchDbIdAndTables();
