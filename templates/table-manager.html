@@ -543,6 +543,38 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    async function pollForTableReady(tableId) {
+        const maxRetries = 8;
+        const retryDelay = 750; // ms
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await fetchWithAuth(`/api/v1/tables/${tableId}/status`);
+                if (response.ok) {
+                    console.log(`Table ${tableId} is ready.`);
+                    return true; // Table is ready
+                }
+            } catch (error) {
+                // This might happen if the API is down, but we'll let the loop continue
+                console.warn(`Polling attempt ${attempt} failed, but will retry.`, error);
+            }
+            
+            if (attempt < maxRetries) {
+                console.log(`Attempt ${attempt}: Table ${tableId} not ready, retrying in ${retryDelay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
+        }
+
+        // If the loop finishes without success
+        showError(`Table ${tableId} did not become available in time. Please try refreshing the page.`);
+        return false;
+    }
+
+    async function handleTableUpdate(updatedTable, response) {
+        const tableIndex = state.tables.findIndex(t => t.id === updatedTable.id);
+        if (tableIndex > -1) state.tables[tableIndex] = updatedTable;
+        state.selectedTable = updatedTable;
+    }
     // --- Data Fetching and Rendering ---
 
     /**
@@ -1350,13 +1382,11 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const index = parseInt(document.getElementById('edit-column-index').value, 10);
         state.selectedTable.columns[index].name = document.getElementById('edit-column-name').value;
-        state.selectedTable.columns[index].type = document.getElementById('edit-column-type').value;
         state.selectedTable.columns[index].is_not_null = document.getElementById('edit-is-not-null').checked;
         state.selectedTable.columns[index].is_unique = document.getElementById('edit-is-unique').checked;
         
-        if (await saveTableStructure()) {
-            closeModal(editColumnModal);
-        }
+        await saveTableStructure();
+        closeModal(editColumnModal);
     }
 
     // --- Full DB SQL View ---

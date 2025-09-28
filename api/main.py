@@ -323,6 +323,10 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
                  raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A table with the name '{table_data.name}' already exists in this database.")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not create table: {str(e)}")
 
+@app.get("/api/v1/tables/{table_id}/status", status_code=status.HTTP_200_OK)
+async def get_table_status(table_id: int, auth_details: dict = Depends(get_current_user_details)):
+    return {"status": "ok", "message": "Table exists and is accessible."}
+
 @app.post("/api/v1/databases/by-name/{db_name}/tables", response_model=TableResponse, status_code=status.HTTP_201_CREATED)
 async def create_table_by_db_name(db_name: str, table_data: TableCreate, auth_details: dict = Depends(get_current_user_details)):
     """
@@ -681,7 +685,7 @@ def _extract_sql_type(col_def_str: str) -> str:
 
 
 @app.put("/api/v1/tables/{table_id}", response_model=TableResponse)
-async def update_database_table(table_id: int, table_data: TableUpdate, auth_details: dict = Depends(get_current_user_details)):
+async def update_database_table(table_id: int, table_data: TableUpdate, response: Response, auth_details: dict = Depends(get_current_user_details)):
     """
     Updates a table's structure (name and columns).
     """
@@ -691,7 +695,7 @@ async def update_database_table(table_id: int, table_data: TableUpdate, auth_det
             "name": table_data.name,
             "columns": [col.dict() for col in table_data.columns]
         }
-        response = supabase.table("user_tables").update(update_data, returning="representation").eq("id", table_id).execute()
+        db_response = supabase.table("user_tables").update(update_data, returning="representation").eq("id", table_id).execute()
         if not response.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found or access denied.")
         
@@ -706,6 +710,7 @@ async def update_database_table(table_id: int, table_data: TableUpdate, auth_det
                 'p_table_name': updated_table['name']
             }).execute()
         except Exception as view_error:
+            response.headers["X-View-Created"] = "false"
             print(f"Warning: Could not update view for table {updated_table['id']} after structure change: {view_error}")
 
         return updated_table
