@@ -447,6 +447,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const sqlBuilderModal = document.getElementById('sql-builder-modal');
     const closeSqlBuilderBtn = document.getElementById('close-sql-builder-btn');
 
+    // --- SQL Builder State & Elements ---
+    let dbDataCache = {}; // To store all DB data for client-side querying
+    let queryBuilderState = { from: null, selects: [], joins: [], wheres: [] };
+
     
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
@@ -1877,6 +1881,212 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('new-columns-list').appendChild(createColumnRow());
         validateCreateTableForm(); // Re-validate when a new column is added
     });
+
+    // --- SQL Query Builder Logic ---
+
+    buildSqlQueryBtn.addEventListener('click', async () => {
+        if (!state.dbId) {
+            showError("Please select a database first.");
+            return;
+        }
+        openModal(sqlBuilderModal);
+
+        // Fetch all data for the client-side preview if not already cached
+        if (Object.keys(dbDataCache).length === 0) {
+            try {
+                const response = await fetchWithAuth(`/api/v1/databases/${state.dbId}/all-data`);
+                if (!response.ok) throw new Error(await getErrorFromResponse(response));
+                dbDataCache = await response.json();
+                
+                // Populate the initial 'FROM' dropdown
+                const fromSelect = document.getElementById('from-table-select');
+                fromSelect.innerHTML = '<option value="">-- Select Table --</option>';
+                Object.keys(dbDataCache).forEach(tableName => {
+                    fromSelect.innerHTML += `<option value="${tableName}">${tableName}</option>`;
+                });
+
+            } catch (error) {
+                showError(`Failed to load data for Query Builder: ${error.message}`);
+                closeModal(sqlBuilderModal);
+            }
+        }
+    });
+
+    closeSqlBuilderBtn.addEventListener('click', () => closeModal(sqlBuilderModal));
+
+    // When the main 'FROM' table changes
+    document.getElementById('from-table-select').addEventListener('change', (e) => {
+        const tableName = e.target.value;
+        const selectContainer = document.getElementById('select-columns-container');
+        selectContainer.innerHTML = '';
+
+        if (!tableName || !dbDataCache[tableName]) {
+            selectContainer.innerHTML = '<p class="text-sm text-gray-500">Select a table first.</p>';
+            return;
+        }
+
+        // Populate the 'SELECT' column checkboxes
+        const tableData = dbDataCache[tableName][0]; // Use first row to get columns
+        if (tableData && tableData.data) {
+            Object.keys(tableData.data).forEach(colName => {
+                const id = `select-col-${tableName}-${colName}`;
+                selectContainer.innerHTML += `
+                    <label for="${id}" class="flex items-center gap-2 p-1 rounded hover:bg-gray-200 cursor-pointer">
+                        <input type="checkbox" id="${id}" data-table="${tableName}" data-column="${colName}" class="h-4 w-4 rounded">
+                        <span class="font-mono text-sm">${tableName}.${colName}</span>
+                    </label>
+                `;
+            });
+        }
+    });
+
+    document.getElementById('generate-sql-btn').addEventListener('click', () => {
+        const fromTable = document.getElementById('from-table-select').value;
+        if (!fromTable) {
+            showError("You must select a table in the 'FROM' clause.");
+            return;
+        }
+
+        // Collect SELECT columns
+        const selectedCols = [];
+        document.querySelectorAll('#select-columns-container input:checked').forEach(cb => {
+            selectedCols.push(`"${cb.dataset.table}"."${cb.dataset.column}"`);
+        });
+        const selectClause = selectedCols.length > 0 ? selectedCols.join(',\n  ') : '*';
+
+        // Collect JOIN clauses
+        const joinClauses = [];
+        // This part would be implemented when JOIN UI is added
+
+        // Collect WHERE clauses
+        const whereClauses = [];
+        // This part would be implemented when WHERE UI is added
+
+        let sql = `SELECT\n  ${selectClause}\nFROM\n  "${fromTable}"`;
+        if (joinClauses.length > 0) {
+            sql += `\n${joinClauses.join('\n')}`;
+        }
+        if (whereClauses.length > 0) {
+            sql += `\nWHERE\n  ${whereClauses.join(' AND\n  ')}`;
+        }
+        sql += ';';
+
+        document.getElementById('generated-sql-output').value = sql;
+    });
+
+    document.getElementById('copy-generated-sql-btn').addEventListener('click', (e) => {
+        const sql = document.getElementById('generated-sql-output').value;
+        if (!sql) return;
+        navigator.clipboard.writeText(sql).then(() => {
+            e.target.textContent = 'Copied!';
+            setTimeout(() => e.target.textContent = 'Copy', 2000);
+        });
+    });
+
+    document.getElementById('preview-data-btn').addEventListener('click', () => {
+        const fromTable = document.getElementById('from-table-select').value;
+        if (!fromTable) {
+            showError("You must select a table in the 'FROM' clause to preview data.");
+            return;
+        }
+
+        // Get data from the FROM table. We need to work with the 'data' property of each row.
+        let results = dbDataCache[fromTable].map(row => row.data);
+
+        // --- TODO: Implement JOIN logic here ---
+        // This would involve iterating through JOIN conditions and merging data.
+
+        // --- TODO: Implement WHERE filtering logic here ---
+        // This would involve filtering the 'results' array based on WHERE conditions.
+
+        // Get selected columns for the final output
+        const selectedCols = [];
+        document.querySelectorAll('#select-columns-container input:checked').forEach(cb => {
+            selectedCols.push({ table: cb.dataset.table, column: cb.dataset.column });
+        });
+
+        // If specific columns are selected, map the results to include only those.
+        if (selectedCols.length > 0) {
+            results = results.map(row => {
+                const newRow = {};
+                selectedCols.forEach(sc => {
+                    // For now, this only works for the FROM table. Joins would require more complex logic.
+                    if (sc.table === fromTable) {
+                        newRow[`${sc.table}.${sc.column}`] = row[sc.column];
+                    }
+                });
+                return newRow;
+            });
+        } else {
+            // If no columns are selected (SELECT *), format the keys to include the table name.
+            results = results.map(row => {
+                const newRow = {};
+                for (const key in row) {
+                    newRow[`${fromTable}.${key}`] = row[key];
+                }
+                return newRow;
+            });
+        }
+
+        renderPreviewResults(results);
+    });
+
+    function renderPreviewResults(data) {
+        const container = document.querySelector('#query-results-container .overflow-auto');
+        container.innerHTML = '';
+
+        if (!data || data.length === 0) {
+            container.innerHTML = '<p class="p-4 text-sm text-gray-500">Query returned no results.</p>';
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'min-w-full text-xs';
+
+        const thead = document.createElement('thead');
+        thead.className = 'bg-gray-100';
+        const headerRow = document.createElement('tr');
+        const headers = Object.keys(data[0]);
+        headers.forEach(header => {
+            const th = document.createElement('th');
+            th.className = 'p-2 text-left font-semibold';
+            th.textContent = header;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        tbody.className = 'divide-y';
+        data.slice(0, 100).forEach(rowData => { // Limit preview to 100 rows for performance
+            const tr = document.createElement('tr');
+            headers.forEach(header => {
+                const td = document.createElement('td');
+                td.className = 'p-2 whitespace-nowrap';
+                let value = rowData[header];
+                if (value === null || value === undefined) {
+                    td.textContent = 'NULL';
+                    td.className += ' text-gray-400';
+                } else if (typeof value === 'object') {
+                    td.textContent = JSON.stringify(value);
+                } else {
+                    td.textContent = String(value);
+                }
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+
+        container.appendChild(table);
+
+        if (data.length > 100) {
+            const footer = document.createElement('p');
+            footer.className = 'p-2 text-xs text-gray-500 bg-gray-50 text-center';
+            footer.textContent = `Showing first 100 of ${data.length} rows.`;
+            container.appendChild(footer);
+        }
+    }
 
     // --- App Initialization ---
     
