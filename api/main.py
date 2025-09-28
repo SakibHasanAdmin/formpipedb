@@ -345,12 +345,12 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Script must be a single CREATE TABLE statement. Only one table can be created at a time via this endpoint.")
 
     # --- FIX: Use the more robust regex from the main SQL import function ---
-    create_match = re.search(r'CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"]?(\w+)[`"]?\s*\(((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*)\)', script, re.DOTALL | re.IGNORECASE)
+    create_match = re.search(r'CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"\']?([\w\s]+)[`"\']?\s*\(((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*)\)', script, re.DOTALL | re.IGNORECASE)
     if not create_match:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CREATE TABLE syntax. Could not find table name and column definitions.")
 
-    _, columns_str = create_match.groups()
-    table_name = sql_data.name # Use the name from the request body
+    parsed_table_name, columns_str = create_match.groups()
+    table_name = sql_data.name or parsed_table_name.strip('`"\' ') # Use name from body, or fall back to parsed name
     columns_defs = []
     table_level_fks = []
  

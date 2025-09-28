@@ -163,6 +163,10 @@
             <button id="add-column-to-modal-btn" type="button" class="text-sm text-blue-600 hover:underline mt-2 font-semibold">+ Add Column</button>
         </div>
         <div id="sql-create-tab" class="create-table-tab-content hidden p-6 space-y-4 overflow-y-auto">
+            <div>
+                <label for="new-table-name-sql" class="block text-sm font-medium text-gray-700">Table Name</label>
+                <input id="new-table-name-sql" type="text" placeholder="Table Name (e.g., products)" required class="mt-1 w-full p-2 border rounded-md" autocomplete="off">
+            </div>
             <p class="text-sm text-gray-600">Paste a single `CREATE TABLE` statement below.</p>
             <textarea id="create-table-sql-input" class="w-full h-64 p-2 border rounded-md font-mono text-sm" placeholder="CREATE TABLE products (...);"></textarea>
         </div>
@@ -1040,6 +1044,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         resetCsvImportForm();
         
+        document.getElementById('new-table-name-sql').value = '';
         createTableTabButtonsInModal[0].click();
         
         document.getElementById('create-table-sql-input').value = '';
@@ -1093,12 +1098,13 @@ document.addEventListener('DOMContentLoaded', () => {
             payload = { name: tableName, columns };
 
         } else { // activeTab === 'sql'
-            if (!state.dbId) throw new Error("Database ID not loaded. Cannot create table from SQL.");
-
-            // Use the generic 'execute-sql' endpoint which can handle CREATE, INSERT, etc.
-            url = `/api/v1/databases/${state.dbId}/execute-sql`;
+            url = `/api/v1/databases/${state.dbId}/create-table-from-sql`;
+            const tableName = document.getElementById('new-table-name-sql').value.trim();
             const sqlScript = document.getElementById('create-table-sql-input').value.trim();
-            payload = { script: sqlScript };
+            if (!tableName) {
+                throw new Error("Table name is required when creating from SQL.");
+            }
+            payload = { name: tableName, script: sqlScript };
         }
 
         try {
