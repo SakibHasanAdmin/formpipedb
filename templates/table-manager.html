@@ -820,13 +820,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     input.type = 'text';
                     if (isNew && isAuto) {
                         input.value = '(auto)';
-                        input.placeholder = '(auto)';
                     } else {
                         input.value = cellValue;
                     }
                     input.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 editable-cell-input';
-                    input.readOnly = isAuto;
-                    input.classList.toggle('bg-gray-100', isAuto);
+                    // The primary key should always be read-only after creation.
+                    input.readOnly = !isNew || isAuto;
+                    input.classList.toggle('bg-gray-100', !isNew || isAuto);
                     td.appendChild(input);
                 } else if (col.type === 'boolean') { // --- BOOLEAN ---
                     const select = document.createElement('select');
@@ -1195,7 +1195,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const rows = await response.json();
             if (rows.length === 0) {
-                showError('Table is empty, nothing to export.');
+                // It's not an error if the table is empty, just inform the user.
+                const a = document.createElement('a'); // Create a dummy link to show browser's "no file" dialog
+                a.click();
                 return;
             }
 
@@ -1203,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const csvRows = [columns.join(',')];
             rows.forEach(row => {
                 const values = columns.map(colName => {
-                    const value = colName === 'id' ? row.id : (row.data ? (row.data[colName] ?? '') : ''); // Basic CSV escaping: wrap in quotes if it contains a comma or quote
+                    const value = row[colName] ?? ''; // Basic CSV escaping: wrap in quotes if it contains a comma or quote
                     const strValue = String(value);
                     if (strValue.includes(',') || strValue.includes('"')) {
                         return `"${strValue.replace(/"/g, '""')}"`;

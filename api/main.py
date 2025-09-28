@@ -418,8 +418,8 @@ async def create_table_from_sql(database_id: int, sql_data: SqlTableCreateReques
             })
 
         is_pk = "PRIMARY KEY" in type_and_constraints.upper()
-        is_auto_increment = ('AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()) or \
-                            (is_pk and 'INT' in col_type.upper() and 'AUTO_INCREMENT' not in type_and_constraints.upper())
+        # Correctly identify auto-incrementing columns. 'SERIAL' is a type, not just a constraint.
+        is_auto_increment = 'AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()
 
         columns_defs.append(ColumnDefinition(
             name=col_name,
@@ -1324,8 +1324,8 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
                     })
 
                 is_pk = "PRIMARY KEY" in type_and_constraints.upper()
-                is_auto_increment = ('AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()) or \
-                                    (is_pk and 'INT' in col_type.upper() and 'AUTO_INCREMENT' not in type_and_constraints.upper())
+                # Correctly identify auto-incrementing columns. 'SERIAL' is a type, not just a constraint.
+                is_auto_increment = 'AUTO_INCREMENT' in type_and_constraints.upper() or 'SERIAL' in col_type.upper()
 
                 columns_defs.append(ColumnDefinition(
                     name=col_name,
