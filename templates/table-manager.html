@@ -450,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
+    
     let initialDataLoaded = false;
 
     function showError(message, error = null) {
