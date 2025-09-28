@@ -8,7 +8,7 @@ from pathlib import Path
 import io, csv
 import re
 from fastapi import FastAPI, Request, Header, HTTPException, status, Depends, Query
-from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse, Response
 from fastapi.templating import Jinja2Templates
 import httpx
 from fastapi.staticfiles import StaticFiles
@@ -1369,12 +1369,21 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
         raise HTTPException(status_code=400, detail=f"Failed to import SQL script: {str(e)}. The new database has been rolled back.")
 
 @app.post("/api/v1/databases/{database_id}/query")
-async def run_sql_query(database_id: int, query_data: QueryRequest, auth_details: dict = Depends(get_current_user_details)):
+async def run_sql_query(
+    database_id: int, 
+    query_data: QueryRequest, 
+    response: Response, # Add the Response object to the signature
+    auth_details: dict = Depends(get_current_user_details)
+):
     """
     Executes a read-only SQL query within the user's security context.
     This is designed to work with the views created for each table.
     """
     supabase = auth_details["client"]
+
+    # --- FIX: Prevent aggressive caching by browsers or CDNs ---
+    # These headers instruct any intermediate cache to not store the response.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
 
     # --- FIX: Make query parsing more robust by stripping comments and preserving formatting ---
     # Remove multi-line /* ... */ comments first, then single-line -- comments.
