@@ -1014,12 +1014,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             payload = { name: tableName, columns };
 
-        } else { // activeTab === 'sql' // This endpoint still requires an ID. Ensure it's available.
+        } else { // activeTab === 'sql'
             if (!state.dbId) throw new Error("Database ID not loaded. Cannot create table from SQL.");
 
-            url = `/api/v1/databases/${state.dbId}/create-table-from-sql`; // This endpoint still requires an ID
+            // Use the generic 'execute-sql' endpoint which can handle CREATE, INSERT, etc.
+            url = `/api/v1/databases/${state.dbId}/execute-sql`;
             const sqlScript = document.getElementById('create-table-sql-input').value.trim();
-            payload = { name: "default_name_from_sql_tab", script: sqlScript };
+            payload = { script: sqlScript };
         }
 
         try {
@@ -1028,18 +1029,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+
             if (!response.ok) {
                 const errorDetail = await getErrorFromResponse(response);
                 throw new Error(errorDetail);
             }
-            closeModal(createTableModal);
-            const newTable = await response.json();
+            closeModal(createTableModal); // On success, close the modal and refresh the table list.
             await fetchDbIdAndTables();
-            // Auto-select the newly created table
-            const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
-            if (newTableLink) {
-                newTableLink.click();
-            }
         } catch (error) {
             showError(error.message, error);
         } finally {
