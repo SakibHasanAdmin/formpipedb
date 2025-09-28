@@ -462,6 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addColumnModal = document.getElementById('add-column-modal');
     const addColumnForm = document.getElementById('add-column-form');
     const cancelAddColumnBtn = document.getElementById('cancel-add-column-btn');
+    const addRowBtn = document.getElementById('add-row-btn');
     const editColumnForm = document.getElementById('edit-column-form');
     const cancelEditColumnBtn = document.getElementById('cancel-edit-column-btn');
     const structureTbody = document.getElementById('structure-tbody');
@@ -471,7 +472,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeDbSqlModalBtn = document.getElementById('close-db-sql-modal-btn');
     const importRowsBtn = document.getElementById('import-rows-btn');
     const importRowsCsvFile = document.getElementById('import-rows-csv-file');
-    const addRowBtn = document.getElementById('add-row-btn');
     const dataTbody = document.getElementById('data-tbody');
     const exportCsvBtn = document.getElementById('export-csv-btn');
     const searchInput = document.getElementById('row-search-input');
@@ -1213,6 +1213,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.selectedTable) return;
         const columns = state.selectedTable.columns.sort((a, b) => a.is_primary_key ? -1 : 1);
         const newRowElement = renderRow({}, columns, true);
+        addRowBtn.disabled = true;
         dataTbody.prepend(newRowElement);
     }
 
@@ -1221,6 +1222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (isNew) {
             rowElement.remove(); // Just remove from UI if it was never saved
+            addRowBtn.disabled = false;
             return;
         }
 
@@ -1395,6 +1397,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // On success, re-fetch the current page AND re-cache FK data in case it changed.
             await cacheForeignKeyData(state.selectedTable);
             await fetchAndRenderData(state.selectedTable.id, state.pagination.currentPage, searchInput.value.trim());
+
+            // Re-enable add row button if a new row was just saved
+            if (isNew) {
+                addRowBtn.disabled = false;
+            }
 
         } catch (error) {
             showError(`Save failed: ${error.message}`, error);
@@ -1886,6 +1893,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    dataTbody.addEventListener('focusin', (e) => {
+        if (e.target.classList.contains('editable-cell-input')) {
+            const td = e.target.closest('td');
+            if (td) td.classList.add('ring-2', 'ring-blue-200');
+        }
+    });
+
+    dataTbody.addEventListener('focusout', (e) => {
+        if (e.target.classList.contains('editable-cell-input')) {
+            const td = e.target.closest('td');
+            if (td) td.classList.remove('ring-2', 'ring-blue-200');
+        }
+    });
+
     const debouncedSearch = debounce(() => {
         const searchTerm = searchInput.value.trim();
         if (state.selectedTable) {
@@ -1907,10 +1928,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // SQL Tab
     document.getElementById('copy-table-sql-btn').addEventListener('click', (e) => {
+        const button = e.target;
         const code = document.getElementById('table-sql-code').textContent;
         navigator.clipboard.writeText(code).then(() => {
-            e.target.textContent = 'Copied!';
-            setTimeout(() => e.target.textContent = 'Copy', 2000);
+            button.textContent = 'Copied!';
+            button.classList.add('bg-green-500');
+            setTimeout(() => {
+                button.textContent = 'Copy';
+                button.classList.remove('bg-green-500');
+            }, 2000);
         });
     });
     viewDbSqlBtn.addEventListener('click', handleViewDbSql);
@@ -2242,11 +2268,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('copy-generated-sql-btn').addEventListener('click', (e) => {
+        const button = e.target;
         const sql = document.getElementById('generated-sql-output').value;
         if (!sql) return;
         navigator.clipboard.writeText(sql).then(() => {
-            e.target.textContent = 'Copied!';
-            setTimeout(() => e.target.textContent = 'Copy', 2000);
+            button.textContent = 'Copied!';
+            button.classList.add('bg-green-500');
+            setTimeout(() => {
+                button.textContent = 'Copy';
+                button.classList.remove('bg-green-500');
+            }, 2000);
         });
     });
 

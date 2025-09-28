@@ -189,6 +189,24 @@ async def get_current_user_details(authorization: str = Header(None)) -> dict:
         # This could be a PostgrestError or another exception
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Invalid token: {str(e)}")
 
+def _handle_api_error(e: APIError):
+    """
+    Centralized handler for common Postgrest API errors to return user-friendly messages.
+    """
+    if e.code == "23505": # unique_violation
+        if "user_databases_name_key" in e.message:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, 
+                detail="A database with that name already exists."
+            )
+        if "user_tables_database_id_name_key" in e.message:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, 
+                detail="A table with that name already exists in this database."
+            )
+    # For other errors, raise a generic bad request or re-raise a more specific one if needed
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not complete request: {e.message}")
+
 # --- API Endpoints ---
 @app.get("/api/v1/databases", response_model=List[DatabaseResponse])
 async def get_user_databases(auth_details: dict = Depends(get_current_user_details)):
@@ -219,10 +237,7 @@ async def create_user_database(db_data: DatabaseCreate, auth_details: dict = Dep
         # The data is returned as a list, so we take the first element.
         return response.data[0]
     except APIError as e:
-        # Check for PostgreSQL's unique violation error code
-        if e.code == "23505":
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A database with the name '{db_data.name}' already exists.")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not create database: {e.message}")
+        _handle_api_error(e)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"An unexpected error occurred: {str(e)}")
 
@@ -295,10 +310,7 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
 
         return created_table
     except APIError as e:
-        # Check for a unique constraint violation on the table name for that database
-        if "user_tables_database_id_name_key" in str(e):
-                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A table with the name '{table_data.name}' already exists in this database.")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not create table: {str(e)}")
+        _handle_api_error(e)
 
 @app.post("/api/v1/databases/by-name/{db_name}/tables", response_model=TableResponse, status_code=status.HTTP_201_CREATED)
 async def create_table_by_db_name(db_name: str, table_data: TableCreate, auth_details: dict = Depends(get_current_user_details)):
@@ -322,9 +334,7 @@ async def create_table_by_db_name(db_name: str, table_data: TableCreate, auth_de
         return await create_database_table(database_id, table_data, auth_details)
 
     except APIError as e:
-        if "user_tables_database_id_name_key" in str(e):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"A table with the name '{table_data.name}' already exists in this database.")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not create table: {str(e)}")
+        _handle_api_error(e)
     except HTTPException as e:
         # Re-raise HTTPExceptions from called functions
         raise e

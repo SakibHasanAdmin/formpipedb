@@ -224,14 +224,24 @@
             } else if (data.user && !data.session) {
                 // User signed up but needs to confirm their email.
                 // --- FIX: Programmatic DOM creation to avoid innerHTML and potential CSP issues ---
+                const formContainer = document.querySelector('.w-full.max-w-md');
                 signupForm.style.display = 'none';
-                document.querySelector('.text-center h1').textContent = 'Check your email!';
-                const successP = document.querySelector('.text-center p');
-                successP.textContent = "We've sent a confirmation link to ";
+                const textCenterDiv = formContainer.querySelector('.text-center');
+                textCenterDiv.innerHTML = ''; // Clear "Log in" link
+
+                const iconSVG = `<svg class="w-16 h-16 text-blue-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>`;
+                const heading = document.createElement('h1');
+                heading.className = 'text-3xl font-bold text-gray-900 mt-4';
+                heading.textContent = 'Check your email!';
+                const successP = document.createElement('p');
+                successP.className = 'mt-4 text-gray-600';
+                successP.textContent = "A verification link has been sent to ";
                 const emailStrong = document.createElement('strong');
                 emailStrong.textContent = email;
                 successP.appendChild(emailStrong);
-                successP.append(". Please click the link to complete your registration.");
+                textCenterDiv.insertAdjacentHTML('afterbegin', iconSVG);
+                textCenterDiv.appendChild(heading);
+                textCenterDiv.appendChild(successP);
             } else {
                 errorMessage.textContent = "An unexpected issue occurred. Please try again.";
             }
