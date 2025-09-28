@@ -977,13 +977,23 @@ document.addEventListener('DOMContentLoaded', () => {
             importCsvNextBtn.classList.toggle('hidden', tab !== 'csv' || importStep2.classList.contains('hidden') === false);
             importCsvSubmitBtn.classList.toggle('hidden', tab !== 'csv' || importStep2.classList.contains('hidden') === true);
 
-            if (tab === 'csv') {
+            // --- FIX: Separate validation logic for different tabs ---
+            if (tab === 'sql') {
+                validateSqlTab();
+            } else if (tab === 'csv') {
                 checkImportCsvNextButtonState();
             } else {
                 validateCreateTableForm();
             }
         });
     });
+
+    function validateSqlTab() {
+        const tableName = document.getElementById('new-table-name-sql').value.trim();
+        const sqlScript = document.getElementById('create-table-sql-input').value.trim();
+        const isValid = tableName && sqlScript;
+        submitCreateTableBtn.disabled = !isValid;
+    }
     
     function openModal(modal) {
         modal.classList.remove('hidden');
@@ -1092,6 +1102,11 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('new-table-name-sql').value = '';
         createTableTabButtonsInModal[0].click();
+
+        // Add event listeners to SQL tab inputs for validation
+        document.getElementById('new-table-name-sql').addEventListener('input', validateSqlTab);
+        document.getElementById('create-table-sql-input').addEventListener('input', validateSqlTab);
+
         
         document.getElementById('create-table-sql-input').value = '';
     }
@@ -1147,9 +1162,6 @@ document.addEventListener('DOMContentLoaded', () => {
             url = `/api/v1/databases/${state.dbId}/create-table-from-sql`;
             const tableName = document.getElementById('new-table-name-sql').value.trim();
             const sqlScript = document.getElementById('create-table-sql-input').value.trim();
-            if (!tableName) {
-                throw new Error("Table name is required when creating from SQL.");
-            }
             payload = { name: tableName, script: sqlScript };
         }
 
