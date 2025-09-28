@@ -338,13 +338,9 @@ async def get_table_status(table_id: int, auth_details: dict = Depends(get_curre
     view_name = f"user_table_view_{table_id}"
     try:
         # Perform a lightweight query against the view. If it succeeds, the view is ready.
-        # --- FIX: Check for table existence AND user access simultaneously ---
-        # Querying the parent table ensures RLS is checked. If this passes, the view is ready for the user.
-        # A `maybe_single()` on the parent table is a very fast check.
-        db_response = supabase.table("user_tables").select("id").eq("id", table_id).maybe_single().execute()
-        if db_response.data:
-            return {"status": "ok", "message": "Table view is ready."}
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Table '{table_id}' not found or access denied.")
+        # We use .limit(0) to fetch no data, just to check for the view's existence in the cache.
+        supabase.from_(view_name).select("id", count='exact').limit(0).execute()
+        return {"status": "ok", "message": "Table view is ready."}
     except APIError as e:
         # Specifically check for the "schema cache" error.
         if e.code == "PGRST205":

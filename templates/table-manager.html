@@ -1098,6 +1098,9 @@ document.addEventListener('DOMContentLoaded', () => {
         submitCreateTableBtn.disabled = true;
         submitCreateTableBtn.textContent = 'Creating...';
 
+        // --- FIX: Add a pending UI element to prevent early clicks ---
+        const tempTableName = activeTab === 'gui' ? document.getElementById('new-table-name').value.trim() : 'New Table';
+        addPendingTableToSidebar(tempTableName);
         if (activeTab === 'csv') { // The CSV import has its own submit button and logic.
             return;
         } else if (activeTab === 'gui') {
