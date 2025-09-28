@@ -64,7 +64,7 @@
         </div>
     </aside>
 
-    <main id="main-content" class="flex-1 p-4 sm:p-6 md:p-8 overflow-auto hidden">
+    <main id="table-view-content" class="flex-1 p-4 sm:p-6 md:p-8 overflow-auto hidden">
         <div id="table-tabs-container" class="border-b mb-4 sm:mb-6 overflow-x-auto">
             <nav class="flex space-x-6 whitespace-nowrap">
                 <button data-tab="data" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-blue-500 text-blue-600">Data</button>
@@ -457,10 +457,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const queryCopySqlBtn = document.getElementById('query-copy-sql-btn');
     const queryResultsDisplay = document.getElementById('query-results-display');
     const queryResultsLoader = document.getElementById('query-results-loader');
-    const queryResultsHeader = document.getElementById('query-results-header');
-    const queryResultsTbody = document.getElementById('query-results-tbody');
     const queryBuilderBtn = document.getElementById('query-builder-btn');
-    const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+    const mainContent = document.getElementById('table-view-content'); // This was correct
+    const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn'); // This was correct
+
     
     // Abort controller to cancel stale data fetch requests
     let dataFetchController = new AbortController();
@@ -576,6 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.dbId = dbWithTables.id;
                 state.tables = dbWithTables.user_tables || [];
                 renderTables(state.tables);
+                populateQueryBuilderFromDropdown(state.tables);
                 initialDataLoaded = true;
                 return; // Exit the function successfully.
 
@@ -658,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.target.classList.add('bg-blue-100', 'text-blue-700', 'font-semibold');
             
             // Show table view, hide other main content areas
-            tableViewContent.classList.remove('hidden');
+            mainContent.classList.remove('hidden');
             queryBuilderContent.classList.add('hidden');
             placeholderContent.classList.add('hidden');
 
@@ -1094,10 +1095,10 @@ document.addEventListener('DOMContentLoaded', () => {
             payload = { name: tableName, columns };
 
         } else { // activeTab === 'sql' // This endpoint still requires an ID. Ensure it's available.
-            if (!state.dbId) throw new Error("Database ID not loaded. Cannot create table from SQL.");
-
-            url = `/api/v1/databases/${state.dbId}/create-table-from-sql`; // This endpoint still requires an ID
+            if (!state.dbId) throw new Error("Database ID not loaded. Cannot create table from SQL."); // This endpoint still requires an ID. Ensure it's available.
+ 
             const sqlScript = document.getElementById('create-table-sql-input').value.trim();
+            url = `/api/v1/databases/${state.dbId}/create-table-from-sql`;
             payload = { name: "default_name_from_sql_tab", script: sqlScript };
         }
 
@@ -1139,7 +1140,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorDetail);
             }
             closeModal(deleteTableModal);
-            tableViewContent.classList.add('hidden');
+            mainContent.classList.add('hidden');
             placeholderContent.classList.remove('hidden');
             tableTabContainer.classList.add('hidden');
             deleteTableBtn.disabled = true;
@@ -1362,7 +1363,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         dbSqlCodeContent.textContent = 'Loading SQL...';
         openModal(viewDbSqlModal);
-
+ 
         try {
             const response = await fetchWithAuth(`/api/v1/databases/${state.dbId}/export-sql`);
             if (!response.ok) throw new Error('Failed to fetch database SQL');
@@ -1666,6 +1667,154 @@ document.addEventListener('DOMContentLoaded', () => {
         URL.revokeObjectURL(url);
     }
 
+    // --- Query Builder ---
+
+    function showQueryBuilder() {
+        mainContent.classList.add('hidden');
+        placeholderContent.classList.add('hidden');
+        queryBuilderContent.classList.remove('hidden');
+
+        // De-select any active table in the sidebar
+        tableList.querySelectorAll('a').forEach(a => a.classList.remove('bg-blue-100', 'text-blue-700', 'font-semibold'));
+        state.selectedTable = null;
+        deleteTableBtn.disabled = true;
+    }
+
+    function populateQueryBuilderFromDropdown(tables) {
+        queryFromTableSelect.innerHTML = '<option value="">-- Select a table --</option>';
+        tables.forEach(table => {
+            const option = document.createElement('option');
+            option.value = table.id;
+            option.textContent = table.name;
+            queryFromTableSelect.appendChild(option);
+        });
+    }
+
+    function updateQueryBuilderColumnSelectors() {
+        const tableId = queryFromTableSelect.value;
+        const table = state.tables.find(t => t.id == tableId);
+
+        querySelectColumnsDiv.innerHTML = '';
+        queryFiltersContainer.innerHTML = '';
+        queryAddFilterBtn.disabled = true;
+        queryFetchDataBtn.disabled = true;
+        queryGenerateSqlBtn.disabled = true;
+
+        if (!table) {
+            querySelectColumnsDiv.innerHTML = '<p class="text-gray-400 text-sm">Select a table to see columns</p>';
+            return;
+        }
+
+        queryAddFilterBtn.disabled = false;
+        queryFetchDataBtn.disabled = false;
+        queryGenerateSqlBtn.disabled = false;
+
+        // Populate SELECT columns
+        const allColsLabel = document.createElement('label');
+        allColsLabel.className = 'flex items-center p-1 cursor-pointer';
+        allColsLabel.innerHTML = `<input type="checkbox" value="*" class="h-4 w-4 rounded mr-2 query-select-col-cb" checked> <span class="font-semibold">All Columns (*)</span>`;
+        querySelectColumnsDiv.appendChild(allColsLabel);
+
+        table.columns.forEach(col => {
+            const label = document.createElement('label');
+            label.className = 'flex items-center p-1 cursor-pointer';
+            label.innerHTML = `<input type="checkbox" value="${col.name}" class="h-4 w-4 rounded mr-2 query-select-col-cb"> ${col.name}`;
+            querySelectColumnsDiv.appendChild(label);
+        });
+
+        // Handle "All Columns" checkbox logic
+        querySelectColumnsDiv.addEventListener('change', e => {
+            if (!e.target.classList.contains('query-select-col-cb')) return;
+            const allCheckbox = querySelectColumnsDiv.querySelector('input[value="*"]');
+            const otherCheckboxes = querySelectColumnsDiv.querySelectorAll('input:not([value="*"])');
+            if (e.target === allCheckbox && allCheckbox.checked) {
+                otherCheckboxes.forEach(cb => cb.checked = false);
+            } else if (e.target !== allCheckbox && e.target.checked) {
+                allCheckbox.checked = false;
+            }
+        });
+    }
+
+    function addQueryFilterRow() {
+        const tableId = queryFromTableSelect.value;
+        const table = state.tables.find(t => t.id == tableId);
+        if (!table) return;
+
+        const filterRow = document.createElement('div');
+        filterRow.className = 'query-filter-row grid grid-cols-1 sm:grid-cols-12 gap-2 items-center';
+        const columnOptions = table.columns.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+
+        filterRow.innerHTML = `
+            <select class="sm:col-span-4 p-2 border rounded-md bg-white filter-column">
+                ${columnOptions}
+            </select>
+            <select class="sm:col-span-3 p-2 border rounded-md bg-white filter-operator">
+                <option value="=">Equals (=)</option>
+                <option value="!=">Not Equals (!=)</option>
+                <option value=">">Greater Than (&gt;)</option>
+                <option value="<">Less Than (&lt;)</option>
+                <option value=">=">Greater/Equal (&gt;=)</option>
+                <option value="<=">Less/Equal (&lt;=)</option>
+                <option value="LIKE">Contains (LIKE)</option>
+                <option value="NOT LIKE">Not Contains (NOT LIKE)</option>
+                <option value="IN">In (comma-separated)</option>
+                <option value="IS NULL">Is Null</option>
+                <option value="IS NOT NULL">Is Not Null</option>
+            </select>
+            <input type="text" placeholder="Value" class="sm:col-span-4 p-2 border rounded-md filter-value">
+            <button class="sm:col-span-1 remove-filter-btn text-red-500 hover:text-red-700 p-2">&times;</button>
+        `;
+        queryFiltersContainer.appendChild(filterRow);
+
+        filterRow.querySelector('.filter-operator').addEventListener('change', e => {
+            const isNullOperator = ['IS NULL', 'IS NOT NULL'].includes(e.target.value);
+            filterRow.querySelector('.filter-value').disabled = isNullOperator;
+            if (isNullOperator) filterRow.querySelector('.filter-value').value = '';
+        });
+    }
+
+    function generateQuerySql() {
+        const tableId = queryFromTableSelect.value;
+        const table = state.tables.find(t => t.id == tableId);
+        if (!table) return;
+
+        let selectedColumns = Array.from(document.querySelectorAll('.query-select-col-cb:checked')).map(cb => cb.value);
+        if (selectedColumns.length === 0 || selectedColumns.includes('*')) {
+            selectedColumns = ['*'];
+        }
+
+        let sql = `SELECT ${selectedColumns.map(c => c === '*' ? c : `"${c}"`).join(', ')}\nFROM "${table.name}"`;
+
+        const filters = [];
+        document.querySelectorAll('.query-filter-row').forEach(row => {
+            const column = row.querySelector('.filter-column').value;
+            const operator = row.querySelector('.filter-operator').value;
+            let value = row.querySelector('.filter-value').value;
+
+            if (['IS NULL', 'IS NOT NULL'].includes(operator)) {
+                filters.push(`"${column}" ${operator}`);
+            } else {
+                // Basic quoting for string values
+                if (isNaN(value) || value.trim() === '') {
+                    value = `'${value.replace(/'/g, "''")}'`;
+                }
+                if (operator === 'IN') {
+                    value = `(${value})`;
+                }
+                filters.push(`"${column}" ${operator} ${value}`);
+            }
+        });
+
+        if (filters.length > 0) {
+            sql += `\nWHERE ${filters.join('\n  AND ')}`;
+        }
+        sql += ';';
+
+        querySqlCode.textContent = sql;
+        hljs.highlightElement(querySqlCode);
+        querySqlDisplay.classList.remove('hidden');
+    }
+
     // --- Event Listeners Initialization ---
 
     // Sidebar & Mobile responsiveness
@@ -1685,7 +1834,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelDeleteTableBtn.addEventListener('click', () => closeModal(deleteTableModal));
     confirmDeleteTableBtn.addEventListener('click', handleDeleteTable);
     
-    editColumnForm.addEventListener('submit', handleEditColumnSubmit);
+    editColumnForm.addEventListener('submit', handleEditColumnSubmit); // This is correct
     cancelEditColumnBtn.addEventListener('click', () => closeModal(editColumnModal));
 
     queryBuilderBtn.addEventListener('click', showQueryBuilder);
@@ -1810,6 +1959,20 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('new-columns-list').appendChild(createColumnRow());
         validateCreateTableForm(); // Re-validate when a new column is added
     });
+
+    // Query Builder Event Listeners
+    queryFromTableSelect.addEventListener('change', updateQueryBuilderColumnSelectors);
+    queryAddFilterBtn.addEventListener('click', addQueryFilterRow);
+    queryFiltersContainer.addEventListener('click', e => {
+        if (e.target.classList.contains('remove-filter-btn')) {
+            e.target.closest('.query-filter-row').remove();
+        }
+    });
+    queryGenerateSqlBtn.addEventListener('click', generateQuerySql);
+    queryCopySqlBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(querySqlCode.textContent);
+    });
+    // queryFetchDataBtn listener will be added later if needed for execution
 
     // --- App Initialization ---
     

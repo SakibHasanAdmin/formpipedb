@@ -1181,11 +1181,11 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
         create_statement += "\n);\n\n"
         sql_script += create_statement
 
-        # --- FIX: Fetch raw rows directly to avoid incorrect PK injection from get_all_table_rows ---
+        # Fetch raw rows directly to avoid incorrect PK injection from other helpers.
         # RLS on table_rows ensures user can only access rows they own.
         raw_rows_res = supabase.table("table_rows").select("data").eq("table_id", table.id).order("id").execute()
 
-        if raw_rows_res.data:
+        if raw_rows_res.data and isinstance(raw_rows_res.data, list):
             sql_script += f"-- Data for table: {table.name}\n"
             for row in raw_rows_res.data:
                 row_data = row.get('data')
@@ -1193,12 +1193,14 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
                     continue
 
                 pk_col = next((col for col in table.columns if col.is_primary_key), None)
-                pk_is_auto_increment = pk_col.is_auto_increment if pk_col else False
+                # Treat 'serial' type as auto-incrementing as well
+                pk_is_auto_increment = (pk_col.is_auto_increment or pk_col.type.lower() == 'serial') if pk_col else False
                 
                 columns_to_insert = [f'"{k}"' for k, v in row_data.items() if not (pk_is_auto_increment and k == pk_col.name)]
                 values_to_insert = []
                 for k, v in row_data.items():
                     if pk_is_auto_increment and k == pk_col.name:
+                        # Skip auto-incrementing PKs from INSERT statements
                         continue
 
                     if isinstance(v, str):
