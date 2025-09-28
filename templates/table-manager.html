@@ -1820,6 +1820,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners Initialization ---
 
     // Sidebar & Mobile responsiveness
+    tableList.addEventListener('click', handleTableSelect);
     createTableBtn.addEventListener('click', () => {
         resetCreateTableModal();
         openModal(createTableModal);
