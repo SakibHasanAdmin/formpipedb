@@ -330,7 +330,26 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
 
 @app.get("/api/v1/tables/{table_id}/status", status_code=status.HTTP_200_OK)
 async def get_table_status(table_id: int, auth_details: dict = Depends(get_current_user_details)):
-    return {"status": "ok", "message": "Table exists and is accessible."}
+    """
+    Checks if a table's corresponding view is ready and queryable via PostgREST.
+    This is used for polling after table creation to avoid race conditions.
+    """
+    supabase = auth_details["client"]
+    view_name = f"user_table_view_{table_id}"
+    try:
+        # Perform a lightweight query against the view. If it succeeds, the view is ready.
+        # We use .limit(0) to fetch no data, just to check for the view's existence in the cache.
+        supabase.from_(view_name).select("id", count='exact').limit(0).execute()
+        return {"status": "ok", "message": "Table view is ready."}
+    except APIError as e:
+        # Specifically check for the "schema cache" error.
+        if e.code == "PGRST205":
+            # This is the expected "not ready yet" state.
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"View '{view_name}' not yet available in API schema cache.")
+        # For any other error, something is wrong.
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error checking table status: {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unexpected error checking table status: {str(e)}")
 
 @app.post("/api/v1/databases/by-name/{db_name}/tables", response_model=TableResponse, status_code=status.HTTP_201_CREATED)
 async def create_table_by_db_name(db_name: str, table_data: TableCreate, auth_details: dict = Depends(get_current_user_details)):

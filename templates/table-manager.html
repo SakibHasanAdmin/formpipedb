@@ -550,12 +550,15 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 const response = await fetchWithAuth(`/api/v1/tables/${tableId}/status`);
+                // The updated endpoint returns 200 OK only when the view is truly ready.
+                // A 404 is the expected "not ready yet" status.
                 if (response.ok) {
                     console.log(`Table ${tableId} is ready.`);
                     return true; // Table is ready
                 }
             } catch (error) {
-                // This might happen if the API is down, but we'll let the loop continue
+                // A network error or other unexpected issue.
+                // We will still retry a few times.
                 console.warn(`Polling attempt ${attempt} failed, but will retry.`, error);
             }
             
