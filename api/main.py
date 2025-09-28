@@ -1412,7 +1412,7 @@ async def run_sql_query(
         query = original_query
         for name in table_names:
             # Use a case-insensitive regex with word boundaries to avoid partial matches.
-            query = re.sub(r'\b' + re.escape(name) + r'\b', f'db_{database_id}_{name}', query, flags=re.IGNORECASE)
+            query = re.sub(r'\b' + re.escape(name) + r'\b', f'db_{database_id}_public_{name}', query, flags=re.IGNORECASE)
 
     try:
         # Verify user has access to the parent database first.
