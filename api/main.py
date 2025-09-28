@@ -1420,20 +1420,11 @@ async def run_sql_query(
         if not db_check.data:
             raise HTTPException(status_code=404, detail="Database not found or access denied")
 
-        # --- FIX: Execute the query using a POST request to a dummy RPC endpoint ---
-        # This is the correct way to run arbitrary read-only SQL via PostgREST.
-        # The user's JWT is passed, so all queries are executed within their security context,
-        # respecting RLS policies on the underlying views. We POST to a non-existent function name;
-        # PostgREST will execute the SQL from the body instead.
-        
-        # --- FIX: Wrap the user's query in a CTE to bypass the 'must start with SELECT' issue ---
-        # The `run_user_query` RPC function in Supabase also checks if the query starts with SELECT.
-        # By prepending `SET LOCAL`, our previous query failed that check.
-        # Wrapping the user's query in a CTE `WITH ... SELECT` ensures the overall statement is a SELECT,
-        # while still allowing us to set the search_path for the transaction.
-        final_sql_payload = f"SET LOCAL search_path = public, extensions; WITH user_query AS ({query}) SELECT * FROM user_query;"
-
-        postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/run_user_query"
+        # --- FIX: Call the dedicated `execute_user_query` RPC function ---
+        # This function is defined in Supabase to safely handle setting the search_path
+        # and executing the user's read-only query within a single transaction.
+        # We pass the rewritten query as the 'query_text' parameter.
+        postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/execute_user_query"
         headers = {
             "apikey": SUPABASE_ANON_KEY,
             "Authorization": f"Bearer {auth_details['token']}",
@@ -1441,7 +1432,7 @@ async def run_sql_query(
         }
         # The query is sent in the request body.
         async with httpx.AsyncClient() as client:
-            response = await client.post(postgrest_url, headers=headers, json={"sql": final_sql_payload})
+            response = await client.post(postgrest_url, headers=headers, json={"query_text": query})
 
         # --- FIX: Add robust error handling for non-200 responses ---
         if response.status_code != 200:
