@@ -153,6 +153,14 @@ class ContactRequest(BaseModel):
 class AuthenticatedAccountDeletionRequest(BaseModel):
     confirmation: str = Field(..., pattern=r"^delete my account$", description="User must type 'delete my account' to confirm.")
 
+class StatusResponse(BaseModel):
+    status: str
+    message: Optional[str] = None
+
+class SubscriptionResponse(BaseModel):
+    plan: str
+    status: Optional[str] = None
+
 
 
 # --- Reusable Dependencies ---
@@ -1052,6 +1060,56 @@ async def delete_own_account(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
+# === Billing and Subscription Endpoints ===
+
+@app.post("/api/v1/billing/create-dummy-checkout", response_model=StatusResponse)
+async def create_dummy_checkout(auth_details: dict = Depends(get_current_user_details)):
+    """
+    DUMMY ENDPOINT: Simulates a successful checkout for the Pro plan.
+    In a real application, this would call Lemon Squeezy to get a checkout URL.
+    Here, we directly create or update the user's subscription to 'pro'.
+    """
+    if not SUPABASE_SERVICE_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Subscription management is not configured on the server. Missing service key."
+        )
+
+    user = auth_details['user']
+    user_id = user.id
+    supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+    try:
+        # Upsert the subscription: update if exists, insert if not.
+        # This makes the operation idempotent.
+        await asyncio.to_thread(
+            supabase_admin.table("user_subscriptions").upsert({
+                "user_id": user_id,
+                "plan_id": "pro",
+                "status": "active",
+                "updated_at": "now()"
+            }, on_conflict="user_id").execute
+        )
+
+        return {"status": "ok", "message": "Successfully subscribed to Pro plan."}
+    except APIError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=e.message)
+
+
+@app.get("/api/v1/users/me/subscription", response_model=SubscriptionResponse)
+async def get_my_subscription(auth_details: dict = Depends(get_current_user_details)):
+    """
+    Gets the current authenticated user's subscription status.
+    Defaults to the 'free' plan if no subscription is found.
+    """
+    supabase = auth_details["client"]
+    try:
+        response = supabase.table("user_subscriptions").select("plan_id, status").limit(1).single().execute()
+        subscription = response.data
+        return SubscriptionResponse(plan=subscription.get('plan_id', 'free'), status=subscription.get('status'))
+    except APIError:
+        # This error occurs if .single() finds no rows. Default to free plan.
+        return SubscriptionResponse(plan="free", status="active")
 
 @app.get("/api/v1/databases/{database_id}/export-sql", response_class=PlainTextResponse)
 async def export_database_as_sql(database_id: int, auth_details: dict = Depends(get_current_user_details)):
