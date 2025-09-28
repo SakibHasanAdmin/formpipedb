@@ -1063,8 +1063,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         } else if (activeTab === 'gui') {
             url = `/api/v1/databases/by-name/${encodeURIComponent(state.dbName)}/tables`;
-            const tableName = document.getElementById('new-table-name').value.trim();
-            const columnRows = document.querySelectorAll('#new-columns-list .column-row'); // Use the new, more robust endpoint that finds the database by name.
+            const tableName = document.getElementById('new-table-name').value.trim(); // Use the new, more robust endpoint that finds the database by name.
+            const columnRows = document.querySelectorAll('#new-columns-list .column-row');
             
             const columns = Array.from(columnRows).map(row => {
                 const isFk = row.querySelector('[data-key="is_foreign_key"]').checked;
@@ -1092,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
             payload = { name: tableName, columns };
 
         } else { // activeTab === 'sql' // This endpoint still requires an ID. Ensure it's available.
-            if (!state.dbId) throw new Error("Database ID not loaded. Cannot create table from SQL.");
+            if (!state.dbId) { showError("Database ID not loaded. Cannot create table from SQL."); return; }
 
             url = `/api/v1/databases/${state.dbId}/create-table-from-sql`; // This endpoint still requires an ID
             const sqlScript = document.getElementById('create-table-sql-input').value.trim();
