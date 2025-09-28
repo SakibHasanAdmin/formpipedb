@@ -704,7 +704,7 @@ def _extract_sql_type(col_def_str: str) -> str:
 
 
 @app.put("/api/v1/tables/{table_id}", response_model=TableResponse)
-async def update_database_table(table_id: int, table_data: TableUpdate, response: Response, auth_details: dict = Depends(get_current_user_details)):
+async def update_database_table(table_id: int, table_data: TableUpdate, auth_details: dict = Depends(get_current_user_details)):
     """
     Updates a table's structure (name and columns).
     """
@@ -732,7 +732,6 @@ async def update_database_table(table_id: int, table_data: TableUpdate, response
             supabase.rpc('pgrst_reload_schema').execute()
 
         except Exception as view_error:
-            response.headers["X-View-Created"] = "false"
             print(f"Warning: Could not update view for table {updated_table['id']} after structure change: {view_error}")
 
         return updated_table
