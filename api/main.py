@@ -804,17 +804,10 @@ async def get_table_rows(
         # RLS on table_rows ensures user can only access rows they own.
         response = query.order("id").range(offset, offset + limit - 1).execute()
 
-        # 3. Process results to inject the user-visible PK
-        processed_rows = []
-        # If PK is not auto-increment, the value is already in the data blob.
-        # If it IS auto-increment, the value is also already in the data blob because
-        # the view `user_table_view_{id}` correctly casts the internal row ID to the user's PK name.
-        # The previous logic was incorrectly overwriting this value.
-        # The fix is to simply use the data as-is from the view.
-        if response.data and isinstance(response.data, list):
-            processed_rows = response.data
- 
-        return {"total": response.count, "data": processed_rows}
+        # The view `user_table_view_{id}` (which is what `table_rows` points to via RLS)
+        # correctly handles casting the internal row ID to the user's PK name.
+        # No further processing is needed. We can return the data as-is.
+        return {"total": response.count, "data": response.data or []}
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -836,10 +829,8 @@ async def get_all_table_rows(table_id: int, auth_details: dict = Depends(get_cur
         # RLS on table_rows ensures user can only access rows they own.
         response = supabase.table("table_rows").select("*").eq("table_id", table_id).order("id").execute()
 
-        # 2. Process results to inject the user-visible PK if it's auto-increment
         # The view `user_table_view_{id}` correctly casts the internal row ID to the user's PK name.
-        # The previous logic was incorrectly overwriting this value.
-        # The fix is to simply return the data as-is from the view.
+        # No further processing is needed. We can return the data as-is.
         return response.data
 
     except APIError as e:
@@ -1175,7 +1166,7 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
 
                 pk_col = next((col for col in table.columns if col.is_primary_key), None)
                 # Treat 'serial' type as auto-incrementing as well
-                pk_is_auto_increment = (pk_col.is_auto_increment or pk_col.type.lower() == 'serial') if pk_col else False
+                pk_is_auto_increment = (pk_col.is_auto_increment or (pk_col.type or '').lower() == 'serial') if pk_col else False
                 
                 columns_to_insert = [f'"{k}"' for k, v in row_data.items() if not (pk_is_auto_increment and k == pk_col.name)]
                 values_to_insert = []

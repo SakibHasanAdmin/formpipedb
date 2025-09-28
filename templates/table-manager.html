@@ -815,16 +815,17 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 if (col.is_primary_key) {
                     const input = document.createElement('input');
+                    const isAuto = col.is_auto_increment || (col.type || '').toLowerCase() === 'serial';
                     input.type = 'text';
-                    if (isNew && col.is_auto_increment) {
+                    if (isNew && isAuto) {
                         input.value = '(auto)';
                         input.placeholder = '(auto)';
                     } else {
                         input.value = cellValue;
                     }
                     input.className = 'w-full p-2 border-0 rounded-md bg-white focus:ring-2 focus:ring-blue-500 editable-cell-input';
-                    input.readOnly = col.is_auto_increment;
-                    input.classList.toggle('bg-gray-100', col.is_auto_increment);
+                    input.readOnly = isAuto;
+                    input.classList.toggle('bg-gray-100', isAuto);
                     td.appendChild(input);
                 } else if (col.type === 'boolean') { // --- BOOLEAN ---
                     const select = document.createElement('select');
