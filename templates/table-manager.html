@@ -848,7 +848,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 if (col.is_primary_key) {
                     const input = document.createElement('input');
-                    const isAuto = col.is_auto_increment || (col.type || '').toLowerCase() === 'serial';
+                    const isAuto = col.is_auto_increment || (col.type || '').toLowerCase() === 'serial' || col.type === 'INTEGER (PK)';
                     input.type = 'text';
                     if (isNew && isAuto) {
                         input.value = '(auto)';
@@ -1146,12 +1146,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorDetail);
             }
             closeModal(createTableModal);
+
+            // --- FIX: Poll for the table's view to be ready before proceeding ---
+            // This prevents race conditions where the UI tries to fetch data from a view
+            // that hasn't been created or recognized by PostgREST yet.
             const newTable = await response.json();
-            await fetchDbIdAndTables();
-            // Auto-select the newly created table
-            const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
-            if (newTableLink) {
-                newTableLink.click();
+            const isReady = await pollForTableReady(newTable.id);
+
+            if (isReady) {
+                await fetchDbIdAndTables();
+                // Auto-select the newly created table
+                const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
+                if (newTableLink) {
+                    newTableLink.click();
+                }
+            } else {
+                // If polling fails, just refresh the list. The user can click the table manually.
+                await fetchDbIdAndTables();
             }
         } catch (error) {
             showError(error.message, error);
@@ -1540,12 +1551,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!response.ok) {
                 const errorDetail = await getErrorFromResponse(response);
                 throw new Error(errorDetail);
-                }
+                } 
                 closeModal(createTableModal);
                 const newTable = await response.json();
-                await fetchDbIdAndTables();
-                const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
-                if (newTableLink) newTableLink.click();
+
+                // --- FIX: Poll for the table's view to be ready before proceeding ---
+                const isReady = await pollForTableReady(newTable.id);
+                if (isReady) {
+                    await fetchDbIdAndTables();
+                    const newTableLink = tableList.querySelector(`a[data-table-id="${newTable.id}"]`);
+                    if (newTableLink) {
+                        newTableLink.click();
+                    }
+                } else {
+                    await fetchDbIdAndTables();
+                }
+
             } catch (error) {
                 showError(error.message);
             } finally {
