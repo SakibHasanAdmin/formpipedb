@@ -178,11 +178,9 @@
             } else {
                 // The Supabase client now manages the session in the correct storage.
                 // The onAuthStateChange listener on other pages will pick it up automatically.
-                // This is the correct redirection logic
                 const urlParams = new URLSearchParams(window.location.search);
                 const redirectTo = urlParams.get('redirect_to');
-                
-                if (redirectTo && redirectTo.startsWith('/')) {
+                if (redirectTo) {
                     window.location.href = redirectTo;
                 } else {
                     window.location.href = '/app';

@@ -21,7 +21,6 @@
     <header class="bg-white shadow-sm">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
-            <a href="/subscription" id="subscription-status-banner" class="hidden items-center gap-2 text-sm font-semibold text-gray-600 hover:text-blue-600 mr-4 p-2 rounded-lg hover:bg-gray-100"></a>
             <div class="relative">
                 <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <!-- Initials will be inserted here by JS -->
@@ -371,7 +370,64 @@
                 }
             }
 
-            supabase.auth.onAuthStateChange(async (event, session) => {
+            dbList.addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.delete-btn');
+                if (deleteBtn) {
+                    const dbItem = deleteBtn.closest('[data-id]');
+                    dbToDeleteId = dbItem.dataset.id;
+                    const dbName = dbItem.querySelector('span.font-medium').textContent;
+                    modalDbName.textContent = dbName;
+                    deleteModal.classList.remove('hidden');
+                    setTimeout(() => deleteModal.classList.remove('opacity-0'), 10);
+                    return; // Stop further processing
+                }
+
+                const exportBtn = e.target.closest('.export-sql-btn');
+                if (exportBtn) {
+                    const dbId = exportBtn.dataset.dbId;
+                    const dbName = exportBtn.dataset.dbName;
+                    handleExportSql(dbId, dbName, exportBtn);
+                }
+            });
+
+            createDbForm.addEventListener('submit', handleCreateDatabase);
+            cancelDeleteBtn.addEventListener('click', () => closeModal(deleteModal));
+            confirmDeleteBtn.addEventListener('click', handleDeleteDatabase);
+            
+            importSqlBtn.addEventListener('click', () => {
+                importSqlForm.reset();
+                openModal(importSqlModal);
+            });
+
+            cancelImportSqlBtn.addEventListener('click', () => closeModal(importSqlModal));
+            importSqlForm.addEventListener('submit', handleImportSql);
+
+            sqlFileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => { sqlScriptTextarea.value = event.target.result; };
+                    reader.readAsText(file);
+                }
+            });
+
+            newDbNameInput.addEventListener('input', () => {
+                const isValid = newDbNameInput.checkValidity();
+                dbNameError.classList.toggle('hidden', isValid);
+            });
+
+            profileBtn.addEventListener('click', () => {
+                profileDropdown.classList.toggle('hidden');
+            });
+
+
+            signOutBtn.addEventListener('click', async () => {
+                await supabase.auth.signOut(); // This clears the session from storage
+                window.location.href = '/login';
+            });
+
+            // Initial Load
+            supabase.auth.onAuthStateChange((event, session) => {
                 if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
                     if (session) {
                         const user = session.user;
@@ -382,89 +438,10 @@
                         document.getElementById('profile-name').textContent = fullName || 'User';
                         document.getElementById('profile-email').textContent = user.email;
 
-                        // Fetch and display subscription status
-                        const subscriptionBanner = document.getElementById('subscription-status-banner');
-                        try {
-                            const subResponse = await fetchWithAuth('/api/v1/users/me/subscription');
-                            if (subResponse.ok) {
-                                const sub = await subResponse.json();
-                                subscriptionBanner.classList.remove('hidden');
-                                subscriptionBanner.classList.add('flex');
-                                if (sub.plan === 'pro') {
-                                    subscriptionBanner.innerHTML = `<span>Pro Plan</span>`;
-                                } else {
-                                    subscriptionBanner.href = '/login?redirect_to=/checkout';
-                                    subscriptionBanner.innerHTML = `<span>Upgrade to Pro</span>`;
-                                }
-                            }
-                        } catch (error) {
-                            console.error("Could not fetch subscription status:", error);
-                        }
-
-                        // --- Initial Load ---
-                        // This block is now correctly placed inside the authenticated session check.
-                        // It ensures that we only fetch data and set up listeners after we have a valid user.
-
-                        // Fetch data only after a valid session is confirmed.
+                        // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
                         if (!initialDataLoaded) {
                             fetchDatabases();
                         }
-
-                        // Event Listeners
-                        dbList.addEventListener('click', (e) => {
-                            const deleteBtn = e.target.closest('.delete-btn');
-                            if (deleteBtn) {
-                                const dbItem = deleteBtn.closest('[data-id]');
-                                dbToDeleteId = dbItem.dataset.id;
-                                const dbName = dbItem.querySelector('span.font-medium').textContent;
-                                modalDbName.textContent = dbName;
-                                openModal(deleteModal);
-                                return; // Stop further processing
-                            }
-
-                            const exportBtn = e.target.closest('.export-sql-btn');
-                            if (exportBtn) {
-                                const dbId = exportBtn.dataset.dbId;
-                                const dbName = exportBtn.dataset.dbName;
-                                handleExportSql(dbId, dbName, exportBtn);
-                            }
-                        });
-
-                        createDbForm.addEventListener('submit', handleCreateDatabase);
-                        cancelDeleteBtn.addEventListener('click', () => closeModal(deleteModal));
-                        confirmDeleteBtn.addEventListener('click', handleDeleteDatabase);
-                        
-                        importSqlBtn.addEventListener('click', () => {
-                            importSqlForm.reset();
-                            openModal(importSqlModal);
-                        });
-
-                        cancelImportSqlBtn.addEventListener('click', () => closeModal(importSqlModal));
-                        importSqlForm.addEventListener('submit', handleImportSql);
-
-                        sqlFileInput.addEventListener('change', (e) => {
-                            const file = e.target.files[0];
-                            if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (event) => { sqlScriptTextarea.value = event.target.result; };
-                                reader.readAsText(file);
-                            }
-                        });
-
-                        newDbNameInput.addEventListener('input', () => {
-                            const isValid = newDbNameInput.checkValidity();
-                            dbNameError.classList.toggle('hidden', isValid);
-                        });
-
-                        profileBtn.addEventListener('click', () => {
-                            profileDropdown.classList.toggle('hidden');
-                        });
-
-                        signOutBtn.addEventListener('click', async () => {
-                            await supabase.auth.signOut(); // This clears the session from storage
-                            window.location.href = '/login';
-                        });
-
                     } else {
                         window.location.href = '/login';
                     }
