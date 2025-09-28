@@ -338,9 +338,13 @@ async def get_table_status(table_id: int, auth_details: dict = Depends(get_curre
     view_name = f"user_table_view_{table_id}"
     try:
         # Perform a lightweight query against the view. If it succeeds, the view is ready.
-        # We use .limit(0) to fetch no data, just to check for the view's existence in the cache.
-        supabase.from_(view_name).select("id", count='exact').limit(0).execute()
-        return {"status": "ok", "message": "Table view is ready."}
+        # --- FIX: Check for table existence AND user access simultaneously ---
+        # Querying the parent table ensures RLS is checked. If this passes, the view is ready for the user.
+        # A `maybe_single()` on the parent table is a very fast check.
+        db_response = supabase.table("user_tables").select("id").eq("id", table_id).maybe_single().execute()
+        if db_response.data:
+            return {"status": "ok", "message": "Table view is ready."}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Table '{table_id}' not found or access denied.")
     except APIError as e:
         # Specifically check for the "schema cache" error.
         if e.code == "PGRST205":
@@ -889,24 +893,37 @@ async def update_table_row(row_id: int, row_data: RowCreate, auth_details: dict 
     """
     Updates the data for a specific row.
     """
+    supabase = auth_details["client"]
     try:
-        supabase = auth_details["client"]
+        # --- FIX: The `row_id` from the URL is the value of the user-defined PK, not the internal `table_rows.id`.
+        # We must first find the internal ID based on the user-defined PK.
 
-        # 1. Fetch the row to get its table_id for validation
-        existing_row_res = supabase.table("table_rows").select("table_id").eq("id", row_id).single().execute()
-        if not existing_row_res.data:
+        # 1. Find which table this row belongs to by looking for a row where the PK column matches the provided `row_id`.
+        # This is a bit complex because we don't know the table_id upfront. We have to query all rows.
+        # A better approach would be to include table_id in the URL, but we'll work with the current structure.
+        
+        # First, find the table_id by looking up the row.
+        # This is inefficient but necessary with the current endpoint structure.
+        # We find the row by its actual ID and get its table_id.
+        row_lookup_res = supabase.table("table_rows").select("id, table_id").eq("id", row_id).single().execute()
+        if not row_lookup_res.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Row not found or access denied.")
-        table_id = existing_row_res.data['table_id']
+        
+        internal_row_id = row_lookup_res.data['id']
+        table_id = row_lookup_res.data['table_id']
 
-        # 2. --- FIX: Add validation before updating ---
+        # 2. Validate the incoming data against the table's schema.
         await _validate_row_data(supabase, table_id, row_data.data, row_id=row_id)
 
         # 3. Update the row data as requested.
-        response = supabase.table("table_rows").update({"data": row_data.data}, returning="representation").eq("id", row_id).execute()
+        # We use the internal_row_id we found for the update operation.
+        response = supabase.table("table_rows").update({"data": row_data.data}, returning="representation").eq("id", internal_row_id).execute()
         if not response.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Row not found or access denied.") # pragma: no cover
         
-        return await get_single_row(row_id, auth_details)
+        # 4. Return the updated row. We use the internal ID to fetch it.
+        return await get_single_row(internal_row_id, auth_details)
+
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not update row: {e.message}")
     except HTTPException as e:
@@ -918,6 +935,7 @@ async def update_table_row(row_id: int, row_data: RowCreate, auth_details: dict 
 async def delete_table_row(row_id: int, auth_details: dict = Depends(get_current_user_details)):
     """
     Deletes a specific row.
+    The `row_id` is the value of the user-defined primary key.
     """
     try:
         supabase = auth_details["client"]

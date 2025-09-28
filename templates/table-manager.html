@@ -544,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function pollForTableReady(tableId) {
-        const maxRetries = 8;
+        const maxRetries = 12; // --- FIX: Increase retries for more patience ---
         const retryDelay = 750; // ms
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
