@@ -1327,9 +1327,41 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
             await delete_user_database(new_db_id, auth_details)
         raise HTTPException(status_code=400, detail=f"Failed to import SQL script: {str(e)}. The new database has been rolled back.")
 
+@app.get("/api/v1/databases/{database_id}/all-data", response_model=Dict[str, List[RowResponse]])
+async def get_all_database_data(database_id: int, auth_details: dict = Depends(get_current_user_details)):
+    """
+    Fetches all tables and all rows for a given database.
+    Used by the SQL Query Builder for client-side data preview.
+    """
+    supabase = auth_details["client"]
+
+    # 1. Verify user has access to the parent database by fetching it.
+    # This function already contains the necessary RLS checks.
+    try:
+        await get_single_database(database_id, auth_details)
+    except HTTPException as e:
+        # Re-raise the exception from get_single_database (e.g., 404 Not Found)
+        raise e
+
+    # 2. Get all tables for the database.
+    tables_list = await get_database_tables(database_id, auth_details)
+
+    all_data = {}
+
+    # 3. For each table, fetch all of its rows.
+    for table_dict in tables_list:
+        table = TableResponse(**table_dict)
+        # The get_all_table_rows function handles RLS and returns all rows.
+        rows = await get_all_table_rows(table.id, auth_details)
+        all_data[table.name] = rows
+
+    return all_data
+
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
 async def robots_txt():
+
+
     """Serves the robots.txt file from the public directory."""
     return FileResponse(path=BASE_DIR / "public" / "robots.txt", media_type="text/plain")
 
