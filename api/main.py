@@ -129,13 +129,6 @@ class PaginatedRowResponse(BaseModel):
     total: int
     data: List[RowResponse]
 
-class QueryRequest(BaseModel):
-    query: str
-
-class QueryResponse(BaseModel):
-    columns: List[str]
-    rows: List[Dict[str, Any]]
-
 class SqlImportRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
@@ -1367,96 +1360,6 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
         if new_db_id:
             await delete_user_database(new_db_id, auth_details)
         raise HTTPException(status_code=400, detail=f"Failed to import SQL script: {str(e)}. The new database has been rolled back.")
-
-@app.post("/api/v1/databases/{database_id}/query")
-async def run_sql_query(
-    database_id: int, 
-    query_data: QueryRequest, 
-    response: Response, # Add the Response object to the signature
-    auth_details: dict = Depends(get_current_user_details)
-):
-    """
-    Executes a read-only SQL query within the user's security context.
-    This is designed to work with the views created for each table.
-    """
-    supabase = auth_details["client"]
-
-    # --- FIX: Prevent aggressive caching by browsers or CDNs ---
-    # These headers instruct any intermediate cache to not store the response.
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-
-    # --- FIX: Make query parsing more robust by stripping comments and preserving formatting ---
-    # Remove multi-line /* ... */ comments first, then single-line -- comments.
-    query_no_multiline_comments = re.sub(r'/\*.*?\*/', '', query_data.query, flags=re.DOTALL)
-    # Remove single-line comments.
-    query_no_single_line_comments = re.sub(r'--.*', '', query_no_multiline_comments)
-    original_query = query_no_single_line_comments.strip().rstrip(';')
-
-    # Basic validation: only allow SELECT statements for security.
-    if not original_query.upper().startswith("SELECT"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only SELECT queries are allowed.")
-
-    # --- FIX: Automatically rewrite table names to their prefixed view names ---
-    # 1. Fetch all table names for the current database.
-    tables_res = supabase.table("user_tables").select("name").eq("database_id", database_id).execute()
-    if not tables_res.data:
-        # If there are no tables, we can just run the query as-is.
-        query = original_query
-    else:
-        # 2. Create a mapping from original table name to the prefixed view name.
-        table_names = [t['name'] for t in tables_res.data]
-        # Sort by length descending to replace longer names first (e.g., 'book_authors' before 'book').
-        table_names.sort(key=len, reverse=True)
-
-        # 3. Iteratively replace each table name in the query with its view name.
-        query = original_query
-        for name in table_names:
-            # Use a case-insensitive regex with word boundaries to avoid partial matches.
-            query = re.sub(r'\b' + re.escape(name) + r'\b', f'db_{database_id}_public_{name}', query, flags=re.IGNORECASE)
-
-    try:
-        # Verify user has access to the parent database first.
-        db_check = supabase.table("user_databases").select("id").eq("id", database_id).maybe_single().execute()
-        if not db_check.data:
-            raise HTTPException(status_code=404, detail="Database not found or access denied")
-
-        # --- FIX: Call the dedicated `execute_user_query` RPC function ---
-        # This function is defined in Supabase to safely handle setting the search_path
-        # and executing the user's read-only query within a single transaction.
-        # We pass the rewritten query as the 'query_text' parameter.
-        postgrest_url = f"{SUPABASE_URL}/rest/v1/rpc/execute_user_query"
-        headers = {
-            "apikey": SUPABASE_ANON_KEY,
-            "Authorization": f"Bearer {auth_details['token']}",
-            "Content-Type": "application/json"
-        }
-        # The query is sent in the request body.
-        async with httpx.AsyncClient() as client:
-            response = await client.post(postgrest_url, headers=headers, json={"query_text": query})
-
-        # --- FIX: Add robust error handling for non-200 responses ---
-        if response.status_code != 200:
-            try:
-                error_data = response.json()
-                # Supabase errors have a 'message' key.
-                error_message = error_data.get('message', 'An unknown query error occurred.')
-            except Exception:
-                # If the response isn't JSON, use the raw text.
-                error_message = response.text
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Query failed: {error_message}")
-
-        result_data = response.json()
-
-        # The new function returns an empty list for no results, which is perfect.
-        if not result_data or not isinstance(result_data, list):
-            return {"columns": [], "rows": []}
-
-        columns = list(result_data[0].keys()) if result_data and result_data[0] else []
-        return {"columns": columns, "rows": result_data}
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
 
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
