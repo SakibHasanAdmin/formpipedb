@@ -312,6 +312,11 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
                 'p_database_id': database_id,
                 'p_table_name': created_table['name']
             }).execute()
+            # --- FIX: Notify PostgREST to reload its schema cache ---
+            # This is crucial to make the new view immediately available to the API.
+            # Without this, subsequent API calls might fail with a "table not found" error.
+            supabase.rpc('pgrst_reload_schema').execute()
+
         except Exception as view_error:
             # If view creation fails, we don't fail the whole request, but we should log it.
             print(f"Warning: Could not create view for table {created_table['id']}: {view_error}")
@@ -709,6 +714,9 @@ async def update_database_table(table_id: int, table_data: TableUpdate, response
                 'p_database_id': updated_table['database_id'],
                 'p_table_name': updated_table['name']
             }).execute()
+            # --- FIX: Notify PostgREST to reload its schema cache after updating the view ---
+            supabase.rpc('pgrst_reload_schema').execute()
+
         except Exception as view_error:
             response.headers["X-View-Created"] = "false"
             print(f"Warning: Could not update view for table {updated_table['id']} after structure change: {view_error}")
@@ -1389,6 +1397,9 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
                     'p_database_id': new_db_id,
                     'p_table_name': table['name'],
                 }).execute()
+                # --- FIX: Notify PostgREST to reload its schema cache after creating the view ---
+                supabase.rpc('pgrst_reload_schema').execute()
+
             except Exception as view_error:
                 print(f"Warning: Could not create view for imported table {table['id']} ({table['name']}): {view_error}")
 
