@@ -68,6 +68,7 @@
             <nav class="flex space-x-6 whitespace-nowrap">
                 <button data-tab="data" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-blue-500 text-blue-600">Data</button>
                 <button data-tab="structure" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">Structure</button>
+                <button data-tab="query" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">Query</button>
                 <button data-tab="table-sql" class="table-tab-btn py-2 px-1 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">SQL</button>
             </nav>
         </div>
@@ -90,6 +91,64 @@
                         <tbody id="structure-tbody" class="divide-y">
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="query-tab-content" class="table-tab-content hidden">
+            <div class="space-y-6">
+                <!-- Query Builder UI -->
+                <div id="query-builder-ui" class="bg-white p-6 rounded-lg shadow-sm border space-y-4">
+                    <!-- FROM Clause -->
+                    <div>
+                        <label for="query-from-table" class="block text-sm font-medium text-gray-700">FROM</label>
+                        <select id="query-from-table" class="mt-1 block w-full md:w-1/3 p-2 border rounded-md bg-white"></select>
+                    </div>
+
+                    <!-- SELECT Clause -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">SELECT</label>
+                        <div id="query-select-columns" class="mt-2 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 border p-3 rounded-md bg-gray-50">
+                            <p class="col-span-full text-xs text-gray-500">Select a table to see columns.</p>
+                        </div>
+                    </div>
+
+                    <!-- WHERE Clause -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">WHERE</label>
+                        <div id="query-where-clauses" class="mt-2 space-y-2">
+                            <!-- Where clauses will be added here -->
+                        </div>
+                        <button id="add-where-clause-btn" class="mt-2 text-sm text-blue-600 hover:underline font-semibold">+ Add filter condition</button>
+                    </div>
+
+                    <div class="pt-4 border-t">
+                        <button id="run-query-btn" class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 font-semibold">Run Query</button>
+                    </div>
+                </div>
+
+                <!-- Query Results -->
+                <div id="query-results-container" class="hidden">
+                    <h3 class="text-lg font-semibold mb-2">Query Results</h3>
+                    <div id="query-results-table-wrapper" class="bg-white rounded-lg shadow-sm border overflow-auto max-h-[60vh] relative">
+                        <div id="query-results-loader" class="hidden absolute inset-0 bg-white bg-opacity-75 z-10 flex items-center justify-center">
+                            <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        </div>
+                        <table class="min-w-full text-sm">
+                            <thead id="query-results-header" class="bg-gray-50 sticky top-0 z-10"></thead>
+                            <tbody id="query-results-body" class="divide-y"></tbody>
+                        </table>
+                    </div>
+                    <p id="query-results-count" class="text-sm text-gray-600 mt-2"></p>
+                </div>
+
+                <!-- Generated SQL -->
+                <div id="generated-sql-container" class="hidden">
+                    <h3 class="text-lg font-semibold mb-2">Generated SQL</h3>
+                    <div class="p-4 rounded-md font-mono text-sm ring-1 ring-gray-200 relative bg-[#282c34]">
+                        <button id="copy-generated-sql-btn" class="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-semibold py-1 px-2 rounded">Copy</button>
+                        <pre><code id="generated-sql-code" class="language-sql"></code></pre>
+                    </div>
                 </div>
             </div>
         </div>

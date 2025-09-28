@@ -138,6 +138,23 @@ class SqlTableCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     script: str
 
+class QueryBuilderWhere(BaseModel):
+    column: str
+    operator: str
+    value: Any
+
+class QueryBuilderRequest(BaseModel):
+    from_table: str
+    select_columns: List[str]
+    where_clauses: List[QueryBuilderWhere] = Field(default_factory=list)
+    # In the future, you could add:
+    # joins: List[QueryBuilderJoin] = Field(default_factory=list)
+    # limit: Optional[int] = 100
+
+class QueryBuilderResponse(BaseModel):
+    data: List[Dict[str, Any]]
+    sql_query: str
+
 # --- FIX: Conditionally use EmailStr to prevent crash if 'email-validator' is not installed ---
 try:
     from pydantic import EmailStr
@@ -1320,6 +1337,101 @@ async def import_database_from_sql(import_data: SqlImportRequest, auth_details: 
         if new_db_id:
             await delete_user_database(new_db_id, auth_details)
         raise HTTPException(status_code=400, detail=f"Failed to import SQL script: {str(e)}. The new database has been rolled back.")
+
+@app.post("/api/v1/databases/{database_id}/query", response_model=QueryBuilderResponse)
+async def run_structured_query(
+    database_id: int,
+    query_request: QueryBuilderRequest,
+    auth_details: dict = Depends(get_current_user_details)
+):
+    """
+    Safely builds and executes a read-only SQL query from a structured request object.
+    This prevents SQL injection by never running user-provided SQL directly.
+    """
+    supabase = auth_details["client"]
+
+    # --- 1. Validation ---
+    # Get all tables for the database to validate against
+    try:
+        tables_dicts = await get_database_tables(database_id, auth_details)
+        tables = [TableResponse(**t) for t in tables_dicts]
+        table_map = {t.name: t for t in tables}
+    except HTTPException:
+        raise HTTPException(status_code=404, detail="Database not found or you don't have access.")
+
+    # Validate 'from_table'
+    if query_request.from_table not in table_map:
+        raise HTTPException(status_code=400, detail=f"Table '{query_request.from_table}' not found in this database.")
+
+    main_table = table_map[query_request.from_table]
+    main_table_columns = {c.name for c in main_table.columns}
+
+    # Validate 'select_columns'
+    if not query_request.select_columns:
+        raise HTTPException(status_code=400, detail="You must select at least one column.")
+    for col in query_request.select_columns:
+        if col not in main_table_columns:
+            raise HTTPException(status_code=400, detail=f"Selected column '{col}' does not exist in table '{main_table.name}'.")
+
+    # Validate 'where_clauses'
+    valid_operators = ["=", "!=", ">", "<", ">=", "<=", "LIKE", "ILIKE", "IS NULL", "IS NOT NULL"]
+    for clause in query_request.where_clauses:
+        if clause.column not in main_table_columns:
+            raise HTTPException(status_code=400, detail=f"WHERE clause column '{clause.column}' does not exist in table '{main_table.name}'.")
+        if clause.operator.upper() not in valid_operators:
+            raise HTTPException(status_code=400, detail=f"Invalid WHERE operator: '{clause.operator}'.")
+
+    # --- 2. Safe SQL Construction ---
+    # Use the internal table_rows table and filter by table_id
+    
+    # SELECT "data"->>'col1', "data"->>'col2'
+    select_parts = [f"data->>'{col}' AS \"{col}\"" for col in query_request.select_columns]
+    select_clause = ", ".join(select_parts)
+
+    # FROM table_rows
+    from_clause = "table_rows"
+
+    # WHERE table_id = :table_id AND (data->>'col' = :val)
+    where_conditions = ["table_id = :table_id"]
+    query_params = {"table_id": main_table.id}
+    
+    for i, clause in enumerate(query_request.where_clauses):
+        param_name = f"where_val_{i}"
+        
+        # Handle operators that don't take a value
+        if clause.operator.upper() in ["IS NULL", "IS NOT NULL"]:
+            where_conditions.append(f"data->>'{clause.column}' {clause.operator.upper()}")
+        else:
+            where_conditions.append(f"data->>'{clause.column}' {clause.operator.upper()} :{param_name}")
+            query_params[param_name] = clause.value
+
+    where_clause = " AND ".join(where_conditions)
+
+    # Combine into the final query
+    # We are using a custom RPC function `execute_safe_query` which you will need to create in Supabase.
+    # This is the most secure way to execute dynamic queries.
+    # For now, we'll simulate this by building the string, but a real implementation should use RPC.
+    # The RPC function would take the clauses as JSON and build the query inside PostgreSQL.
+    
+    # For this example, we will build the query string and use PostgREST filters, which are safe.
+    query = supabase.table("table_rows").select(",".join(query_request.select_columns), head=False)
+    query = query.eq("table_id", main_table.id)
+
+    for clause in query_request.where_clauses:
+        # PostgREST uses `column=op.value` format
+        filter_value = f"{clause.operator.lower()}.{clause.value}"
+        if clause.operator.upper() in ["IS NULL", "IS NOT NULL"]:
+             filter_value = f"{'is' if clause.operator.upper() == 'IS NULL' else 'isnot'}.null"
+        
+        query = query.filter(f"data->>{clause.column}", filter_value)
+
+    # For demonstration, we'll build the SQL string to return to the user.
+    # THIS IS FOR DISPLAY ONLY.
+    final_sql_string = f"SELECT {', '.join([f'\"{c}\"' for c in query_request.select_columns])}\nFROM \"{main_table.name}\"\nWHERE {' AND '.join([f'\"{c.column}\" {c.operator} \'{c.value}\'' for c in query_request.where_clauses])};"
+
+    response = query.limit(500).execute() # Limit results to 500 for safety
+
+    return {"data": response.data, "sql_query": final_sql_string}
 
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
