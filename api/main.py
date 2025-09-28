@@ -242,7 +242,34 @@ async def require_pro_plan(auth_details: dict = Depends(get_current_user_details
             detail="This feature requires a Pro plan. Please upgrade your account."
         )
 
+
+
 # --- API Endpoints ---
+
+        
+@app.get("/checkout", response_class=HTMLResponse)
+async def checkout_page(request: Request):
+    return templates.TemplateResponse(
+        "checkout.html", 
+        {
+            "request": request, 
+            "supabase_url": SUPABASE_URL, 
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        })
+
+@app.get("/subscription", response_class=HTMLResponse)
+async def subscription_page(request: Request):
+    return templates.TemplateResponse(
+        "subscription.html", 
+        {
+            "request": request, 
+            "supabase_url": SUPABASE_URL, 
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        })
+
+
+
+
 @app.get("/api/v1/databases", response_model=List[DatabaseResponse])
 async def get_user_databases(auth_details: dict = Depends(get_current_user_details)):
     """

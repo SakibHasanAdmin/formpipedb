@@ -21,6 +21,8 @@
     <header class="bg-white shadow-sm">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
+            <a href="/subscription" id="subscription-status-banner" class="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-blue-600 mr-4 p-2 rounded-lg hover:bg-gray-100">
+            </a>
             <div class="relative">
                 <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <!-- Initials will be inserted here by JS -->
@@ -427,7 +429,7 @@
             });
 
             // Initial Load
-            supabase.auth.onAuthStateChange((event, session) => {
+            supabase.auth.onAuthStateChange(async (event, session) => {
                 if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
                     if (session) {
                         const user = session.user;
@@ -441,6 +443,28 @@
                         // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
                         if (!initialDataLoaded) {
                             fetchDatabases();
+                        }
+
+                        // Fetch and display subscription status
+                        const subscriptionBanner = document.getElementById('subscription-status-banner');
+                        try {
+                            const subResponse = await fetchWithAuth('/api/v1/users/me/subscription');
+                            if (subResponse.ok) {
+                                const sub = await subResponse.json();
+                                if (sub.plan === 'pro') {
+                                    subscriptionBanner.innerHTML = `
+                                        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-12v4m-2-2h4m5 12v4m-2-2h4M5 3a2 2 0 00-2 2v1h16V5a2 2 0 00-2-2H5zM19 19a2 2 0 01-2 2H7a2 2 0 01-2-2v-1h14v1z"></path></svg>
+                                        <span>Pro Plan</span>
+                                    `;
+                                } else {
+                                    subscriptionBanner.innerHTML = `
+                                        <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                                        <span>Upgrade to Pro</span>
+                                    `;
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Could not fetch subscription status:", error);
                         }
                     } else {
                         window.location.href = '/login';
