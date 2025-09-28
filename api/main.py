@@ -819,31 +819,10 @@ async def get_all_table_rows(table_id: int, auth_details: dict = Depends(get_cur
     """
     try:
         supabase = auth_details["client"]
-        # 1. Get the table schema to find the user-defined primary key column name
-        table_schema_dict = await get_single_table(table_id, auth_details)
-        table_schema_obj = TableResponse(**table_schema_dict)
-        pk_col = next((col for col in table_schema_obj.columns if col.is_primary_key), None)
-        pk_col_name = pk_col.name if pk_col else None
-        pk_is_auto_increment = pk_col.is_auto_increment if pk_col else False
-
         # RLS on table_rows ensures user can only access rows they own.
         response = supabase.table("table_rows").select("*").eq("table_id", table_id).order("id").execute()
-
-        # 2. Process results to inject the user-visible PK if it's auto-increment
-        processed_rows = []
-        if pk_col_name:
-            for i, row in enumerate(response.data):
-                user_visible_id = i + 1
-                if row.get("data") is not None:
-                    row["data"][pk_col_name] = user_visible_id
-                else:
-                    row["data"] = {pk_col_name: user_visible_id}
-                processed_rows.append(row)
-        else:
-            # If PK is not auto-increment, the value is already in the data blob.
-            processed_rows = response.data
-
-        return processed_rows
+        # This endpoint is for raw data export/caching. Do not inject calculated PKs.
+        return response.data
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
