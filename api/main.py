@@ -138,6 +138,12 @@ class SqlTableCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     script: str
 
+class SubscriptionStatusResponse(BaseModel):
+    status: str
+
+class SubscriptionDetailsResponse(BaseModel):
+    plan_id: str
+
 # --- FIX: Conditionally use EmailStr to prevent crash if 'email-validator' is not installed ---
 try:
     from pydantic import EmailStr
@@ -1367,6 +1373,52 @@ async def get_all_database_data(database_id: int, auth_details: dict = Depends(g
 
     return all_data
 
+@app.get("/api/v1/subscription-status", response_model=SubscriptionStatusResponse)
+async def get_subscription_status(auth_details: dict = Depends(get_current_user_details)):
+    """
+    Checks the current user's subscription status.
+    """
+    supabase = auth_details["client"]
+    user = auth_details["user"]
+    try:
+        # RLS on the subscriptions table should ensure we only get the user's own subscription.
+        response = supabase.table("subscriptions").select("status").eq("user_id", user.id).eq("status", "active").maybe_single().execute()
+        
+        if response.data:
+            return SubscriptionStatusResponse(status="Pro")
+        else:
+            return SubscriptionStatusResponse(status="Free")
+            
+    except APIError as e:
+        # If there's an error (e.g., table doesn't exist), gracefully fall back to "Free"
+        print(f"Could not check subscription status, falling back to Free. Error: {e.message}")
+        return SubscriptionStatusResponse(status="Free")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
+
+@app.get("/api/v1/subscription-details", response_model=SubscriptionDetailsResponse)
+async def get_subscription_details(auth_details: dict = Depends(get_current_user_details)):
+    """
+    Fetches the subscription plan for the current user.
+    If no subscription record is found, it defaults to the 'free' plan.
+    """
+    supabase = auth_details["client"]
+    user = auth_details["user"]
+    try:
+        # RLS on the user_subscriptions table should ensure we only get the user's own subscription.
+        response = supabase.table("user_subscriptions").select("plan_id").eq("user_id", user.id).maybe_single().execute()
+        
+        if response and response.data:
+            return SubscriptionDetailsResponse(plan_id=response.data['plan_id'])
+        else:
+            # If no subscription record exists (e.g., for a new user),
+            # gracefully return the 'free' plan by default.
+            return SubscriptionDetailsResponse(plan_id='free')
+            
+    except APIError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"API Error: {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
 async def robots_txt():
@@ -1467,6 +1519,20 @@ async def app_page(request: Request):
     return templates.TemplateResponse(
         "app.html", 
         {"request": request, "supabase_url": SUPABASE_URL, "supabase_anon_key": SUPABASE_ANON_KEY}
+    )
+
+@app.get("/app/subscription", response_class=HTMLResponse)
+async def subscription_page(request: Request):
+    """
+    Serves the subscription management page and passes Supabase credentials.
+    """
+    return templates.TemplateResponse(
+        "subscription.html", 
+        {
+            "request": request,
+            "supabase_url": SUPABASE_URL,
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        }
     )
 
 @app.get("/app/database/{db_name}", response_class=HTMLResponse)
