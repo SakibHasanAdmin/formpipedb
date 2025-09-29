@@ -23,8 +23,8 @@
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
             <div class="flex items-center gap-4">
                 <a href="/app/subscription" id="subscription-status-banner" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors mr-4">
-                    Loading Plan...
-                </a>
+            Loading Plan...
+        </a>
                 <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <!-- Initials will be inserted here by JS -->
                 </button>
@@ -123,328 +123,361 @@
     </div>
 
     <script>
-    const supabaseUrl = '{{ supabase_url }}';
-    const supabaseAnonKey = '{{ supabase_anon_key }}';
-    const supabase = supabaseUrl && supabaseAnonKey ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
+        const supabaseUrl = '{{ supabase_url }}';
+        const supabaseAnonKey = '{{ supabase_anon_key }}';
+        const supabase = supabaseUrl && supabaseAnonKey ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
 
-    document.addEventListener('DOMContentLoaded', () => {
-        if (!supabase) {
-            document.body.innerHTML = '<div class="text-center p-8 text-red-600">Supabase client not configured. Please check your environment variables.</div>';
-            return;
-        }
-
-        const dbList = document.getElementById('db-list');
-        const dbListPlaceholder = document.getElementById('db-list-placeholder');
-        const createDbForm = document.getElementById('create-db-form');
-        const newDbNameInput = document.getElementById('new-db-name');
-        const dbNameError = document.getElementById('db-name-error');
-        const newDbDescInput = document.getElementById('new-db-desc');
-        const profileBtn = document.getElementById('profile-btn');
-        const profileDropdown = document.getElementById('profile-dropdown');
-        const signOutBtn = document.getElementById('sign-out-btn');
-        const importSqlBtn = document.getElementById('import-sql-btn');
-        const importSqlModal = document.getElementById('import-sql-modal');
-        const importSqlForm = document.getElementById('import-sql-form');
-        const cancelImportSqlBtn = document.getElementById('cancel-import-sql-btn');
-        const submitImportSqlBtn = document.getElementById('submit-import-sql-btn');
-        const sqlFileInput = document.getElementById('sql-file-input');
-        const sqlScriptTextarea = document.getElementById('import-sql-script');
-        const deleteModal = document.getElementById('delete-modal');
-        const modalDbName = document.getElementById('modal-db-name');
-        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
-        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
-        let dbToDeleteId = null;
-        let initialDataLoaded = false;
-
-        // THIS IS THE CORRECT, SELF-HEALING AUTH FETCH HELPER
-        async function fetchWithAuth(url, options = {}) {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/login';
-                throw new Error("User not authenticated.");
-            }
-            const headers = { ...options.headers, 'Authorization': `Bearer ${session.access_token}` };
-
-            const response = await fetch(url, { ...options, headers });
-
-            if (response.status === 401 || response.status === 403) {
-                await supabase.auth.signOut();
-                window.location.href = '/login';
-                throw new Error("Invalid session. Redirecting to login.");
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!supabase) {
+                document.body.innerHTML = '<div class="text-center p-8 text-red-600">Supabase client not configured. Please check your environment variables.</div>';
+                return;
             }
 
-            return response;
-        }
+            const dbList = document.getElementById('db-list');
+            const dbListPlaceholder = document.getElementById('db-list-placeholder');
+            const createDbForm = document.getElementById('create-db-form');
+            const newDbNameInput = document.getElementById('new-db-name');
+            const dbNameError = document.getElementById('db-name-error');
+            const newDbDescInput = document.getElementById('new-db-desc');
+            const profileBtn = document.getElementById('profile-btn');
+            const profileDropdown = document.getElementById('profile-dropdown');
+            const signOutBtn = document.getElementById('sign-out-btn');
 
-        async function getInitials(fullName) {
-            if (!fullName) return '?';
-            const names = fullName.trim().split(' ').filter(name => name.length > 0);
-            if (names.length === 0) return '?';
-            const firstInitial = names[0][0];
-            const lastInitial = names.length > 1 ? names[names.length - 1][0] : '';
-            return (firstInitial + lastInitial).toUpperCase();
-        }
+            const importSqlBtn = document.getElementById('import-sql-btn');
+            const importSqlModal = document.getElementById('import-sql-modal');
+            const importSqlForm = document.getElementById('import-sql-form');
+            const cancelImportSqlBtn = document.getElementById('cancel-import-sql-btn');
+            const submitImportSqlBtn = document.getElementById('submit-import-sql-btn');
+            const sqlFileInput = document.getElementById('sql-file-input');
+            const sqlScriptTextarea = document.getElementById('import-sql-script');
 
-        const openModal = (modal) => {
-            modal.classList.remove('hidden');
-            setTimeout(() => modal.classList.remove('opacity-0'), 10);
-        };
+            // Modal elements
+            const deleteModal = document.getElementById('delete-modal');
+            const modalDbName = document.getElementById('modal-db-name');
+            const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+            const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+            let dbToDeleteId = null;
+            let initialDataLoaded = false;
 
-        const closeModal = (modal) => {
-            modal.classList.add('opacity-0');
-            setTimeout(() => modal.classList.add('hidden'), 250);
-        };
-
-        async function fetchDatabases() {
-            try {
-                const response = await fetchWithAuth('/api/v1/databases');
-                if (!response.ok) throw new Error('Failed to fetch databases');
-                const databases = await response.json();
-                renderDatabases(databases);
-            } catch (error) {
-                console.error(error);
-                dbListPlaceholder.textContent = 'Could not load databases.';
-            }
-        }
-
-        async function fetchSubscriptionStatus() {
-            const banner = document.getElementById('subscription-status-banner');
-            try {
-                const response = await fetchWithAuth('/api/v1/subscription-details');
-                if (!response.ok) {
-                    // This will now properly show an error in the banner itself
-                    throw new Error('API Error');
+            /**
+             * A wrapper for the native fetch function that automatically includes
+             * the Supabase authentication token.
+             */
+            async function fetchWithAuth(url, options = {}) {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) {
+                    window.location.href = '/login'; // Redirect if no session
+                    throw new Error("User not authenticated.");
                 }
-                const data = await response.json();
+                const headers = { ...options.headers, 'Authorization': `Bearer ${session.access_token}` };
+                return fetch(url, { ...options, headers });
+            }
+
+            async function getAuthToken() {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                if (error || !session || !session.user) {
+                    console.error("Authentication error, redirecting to login.", error);
+                    window.location.href = '/login';
+                    return null;
+                }
+                return session.access_token;
+            }
+
+            async function fetchSubscriptionStatus() { // --- FIX: Use correct endpoint and logic ---
                 const banner = document.getElementById('subscription-status-banner');
+                if (!banner) return;
 
-                if (data.plan_id === 'free') {
-                    banner.textContent = '✨ Upgrade to Pro';
-                    // FIX #1: Correctly direct free users to the subscription page to upgrade.
-                    banner.href = '/app/subscription';
-                    banner.className = 'px-4 py-2 rounded-md text-sm font-semibold transition-colors mr-4 bg-green-100 text-green-800 hover:bg-green-200';
-                } else {
-                    banner.textContent = '🚀 Pro Plan';
-                    banner.href = '/app/subscription';
-                    // FIX #2: Apply the correct classes for Pro users so the banner is visible.
-                    banner.className = 'px-4 py-2 rounded-md text-sm font-semibold transition-colors mr-4 bg-blue-100 text-blue-800 hover:bg-blue-200';
-                }
-            } catch (error) {
-                console.error('Error fetching subscription status:', error);
-                const banner = document.getElementById('subscription-status-banner');
-                // A more helpful fallback message on error
-                banner.textContent = 'Plan Unavailable';
-                banner.className = 'px-4 py-2 rounded-md text-sm font-semibold transition-colors mr-4 bg-gray-200 text-gray-600 cursor-not-allowed';
-            }
-        }
+                try {
+                    const response = await fetchWithAuth('/api/v1/subscription-details');
+                    if (!response.ok) throw new Error('Failed to fetch subscription status');
+                    const data = await response.json();
 
-        function renderDatabases(databases) {
-            dbList.innerHTML = '';
-            if (databases.length === 0) {
-                dbList.innerHTML = `<div class="text-center py-10 text-gray-500">No databases found. Create one to get started!</div>`;
-                return;
-            }
-            databases.forEach(db => {
-                const dbElement = document.createElement('div');
-                dbElement.className = 'bg-white p-4 rounded-lg shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between border gap-4 md:gap-2';
-                dbElement.setAttribute('data-id', db.id);
-
-                const infoDiv = document.createElement('div');
-                const nameSpan = document.createElement('span');
-                nameSpan.className = 'font-medium text-gray-800';
-                nameSpan.textContent = db.name;
-                const descP = document.createElement('p');
-                descP.className = 'text-sm text-gray-500';
-                descP.textContent = db.description || 'No description';
-                infoDiv.appendChild(nameSpan);
-                infoDiv.appendChild(descP);
-
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'flex items-center gap-2 w-full md:w-auto justify-end flex-wrap';
-                const openLink = document.createElement('a');
-                openLink.href = `/app/database/${db.name}`;
-                openLink.className = 'open-btn text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-md hover:bg-blue-200 font-semibold';
-                openLink.textContent = 'Open';
-                const exportBtn = document.createElement('button');
-                exportBtn.dataset.dbId = db.id;
-                exportBtn.dataset.dbName = db.name;
-                exportBtn.className = 'export-sql-btn text-sm bg-gray-200 px-3 py-1 rounded-md hover:bg-gray-300';
-                exportBtn.textContent = 'Export SQL';
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'delete-btn text-sm bg-red-100 text-red-700 px-3 py-1 rounded-md hover:bg-red-200';
-                deleteBtn.textContent = 'Delete';
-                actionsDiv.append(openLink, exportBtn, deleteBtn);
-
-                dbElement.appendChild(infoDiv);
-                dbElement.appendChild(actionsDiv);
-                dbList.appendChild(dbElement);
-            });
-        }
-
-        async function handleCreateDatabase(e) {
-            e.preventDefault();
-            const name = newDbNameInput.value.trim();
-            const description = newDbDescInput.value.trim();
-            if (!name) return;
-            try {
-                const response = await fetchWithAuth('/api/v1/databases', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, description }),
-                });
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || 'Failed to create database');
-                }
-                fetchDatabases();
-                createDbForm.reset();
-            } catch (error) {
-                alert(`Error: ${error.message}`);
-            }
-        }
-
-        async function handleDeleteDatabase() {
-            if (!dbToDeleteId) return;
-            try {
-                const response = await fetchWithAuth(`/api/v1/databases/${dbToDeleteId}`, { method: 'DELETE' });
-                if (response.status !== 204) {
-                    let errorDetail = `Failed to delete database. Status: ${response.status}`;
-                    try {
-                        const err = await response.json();
-                        errorDetail = err.detail || errorDetail;
-                    } catch (e) {}
-                    throw new Error(errorDetail);
-                }
-                fetchDatabases();
-                closeModal(deleteModal);
-            } catch (error) {
-                alert(`Error: ${error.message}`);
-            }
-        }
-
-        async function handleExportSql(dbId, dbName, exportBtn) {
-            try {
-                exportBtn.textContent = 'Exporting...';
-                exportBtn.disabled = true;
-                const response = await fetchWithAuth(`/api/v1/databases/${dbId}/export-sql`);
-                if (!response.ok) throw new Error('Failed to export SQL');
-                const sqlText = await response.text();
-                const blob = new Blob([sqlText], { type: 'application/sql' });
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.style.display = 'none';
-                link.href = url;
-                link.download = `${dbName}_dump.sql`;
-                document.body.appendChild(link);
-                link.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(link);
-            } catch (error) {
-                alert(`Error exporting SQL: ${error.message}`);
-            } finally {
-                exportBtn.textContent = 'Export SQL';
-                exportBtn.disabled = false;
-            }
-        }
-
-        async function handleImportSql(e) {
-            e.preventDefault();
-            const name = document.getElementById('import-db-name').value.trim();
-            const description = document.getElementById('import-db-desc').value.trim();
-            const script = sqlScriptTextarea.value.trim();
-            if (!name || !script) {
-                alert('Database name and SQL script are required.');
-                return;
-            }
-            submitImportSqlBtn.disabled = true;
-            submitImportSqlBtn.textContent = 'Importing...';
-            try {
-                const response = await fetchWithAuth('/api/v1/databases/import-sql', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, description, script }),
-                });
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || 'Failed to import database');
-                }
-                closeModal(importSqlModal);
-                fetchDatabases();
-            } catch (error) {
-                alert(`Error: ${error.message}`);
-            } finally {
-                submitImportSqlBtn.disabled = false;
-                submitImportSqlBtn.textContent = 'Import Database';
-            }
-        }
-
-        dbList.addEventListener('click', (e) => {
-            const deleteBtn = e.target.closest('.delete-btn');
-            if (deleteBtn) {
-                const dbItem = deleteBtn.closest('[data-id]');
-                dbToDeleteId = dbItem.dataset.id;
-                modalDbName.textContent = dbItem.querySelector('span.font-medium').textContent;
-                openModal(deleteModal);
-                return;
-            }
-            const exportBtn = e.target.closest('.export-sql-btn');
-            if (exportBtn) {
-                handleExportSql(exportBtn.dataset.dbId, exportBtn.dataset.dbName, exportBtn);
-            }
-        });
-
-        createDbForm.addEventListener('submit', handleCreateDatabase);
-        cancelDeleteBtn.addEventListener('click', () => closeModal(deleteModal));
-        confirmDeleteBtn.addEventListener('click', handleDeleteDatabase);
-        importSqlBtn.addEventListener('click', () => {
-            importSqlForm.reset();
-            openModal(importSqlModal);
-        });
-        cancelImportSqlBtn.addEventListener('click', () => closeModal(importSqlModal));
-        importSqlForm.addEventListener('submit', handleImportSql);
-        sqlFileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => { sqlScriptTextarea.value = event.target.result; };
-                reader.readAsText(file);
-            }
-        });
-
-        newDbNameInput.addEventListener('input', () => {
-            dbNameError.classList.toggle('hidden', newDbNameInput.checkValidity());
-        });
-
-        profileBtn.addEventListener('click', () => profileDropdown.classList.toggle('hidden'));
-        signOutBtn.addEventListener('click', async () => {
-            await supabase.auth.signOut();
-            window.location.href = '/login';
-        });
-
-        supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-                if (session) {
-                    const user = session.user;
-                    const fullName = user.user_metadata?.full_name;
-
-                    document.getElementById('profile-btn').textContent = await getInitials(fullName);
-                    document.getElementById('profile-name').textContent = fullName || 'User';
-                    document.getElementById('profile-email').textContent = user.email;
-
-                    if (!initialDataLoaded) {
-                        // THIS IS THE FIX: RUN BOTH FETCHES CONCURRENTLY
-                        Promise.all([fetchDatabases(), fetchSubscriptionStatus()]).then(() => {
-                            initialDataLoaded = true;
-                        });
+                    if (data.plan_id === 'pro') {
+                        banner.href = '/app/subscription';
+                        banner.textContent = '🚀 Pro Plan';
+                        banner.className += ' bg-blue-100 text-blue-800 hover:bg-blue-200';
+                    } else { // Free or any other status
+                        banner.href = '/pricing';
+                        banner.textContent = '✨ Upgrade to Pro';
+                        banner.className += ' bg-green-100 text-green-800 hover:bg-green-200';
                     }
-                } else {
+                } catch (error) { // --- FIX: Hide banner on error ---
+                    console.error('Error fetching subscription status:', error);
+                    banner.style.display = 'none'; // Hide banner on error
+                }
+            }
+
+            function getInitials(fullName) { // --- FIX: Make getInitials more robust ---
+                if (!fullName) return '?';
+                // Split by space and filter out any empty strings from multiple spaces or trailing spaces
+                const names = fullName.trim().split(' ').filter(name => name.length > 0);
+
+                if (names.length === 0) return '?';
+
+                const firstInitial = names[0][0];
+                // If there's more than one name, get the last initial, otherwise use an empty string.
+                const lastInitial = names.length > 1 ? names[names.length - 1][0] : '';
+
+                return (firstInitial + lastInitial).toUpperCase();
+            }
+
+
+            function openModal(modal) {
+                modal.classList.remove('hidden');
+                setTimeout(() => modal.classList.remove('opacity-0'), 10);
+            }
+
+            const closeModal = (modal) => {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.classList.add('hidden'), 250);
+            };
+
+            async function fetchDatabases() {
+                try {
+                    const response = await fetchWithAuth('/api/v1/databases');
+                    if (!response.ok) throw new Error('Failed to fetch databases');
+                    const databases = await response.json();
+                    initialDataLoaded = true; // Mark success
+                    renderDatabases(databases);
+                } catch (error) {
+                    console.error(error);
+                    initialDataLoaded = false; // Allow retry
+                    dbListPlaceholder.textContent = 'Could not load databases.';
+                }
+            }
+
+            function renderDatabases(databases) {
+                dbList.innerHTML = '';
+                if (databases.length === 0) {
+                    dbList.innerHTML = `<div class="text-center py-10 text-gray-500">No databases found. Create one to get started!</div>`;
+                    return;
+                }
+                databases.forEach(db => {
+                    // --- FIX: Programmatic DOM creation to avoid innerHTML and CSP issues ---
+                    const dbElement = document.createElement('div');
+                    dbElement.className = 'bg-white p-4 rounded-lg shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between border gap-4 md:gap-2';
+                    dbElement.setAttribute('data-id', db.id);
+
+                    const infoDiv = document.createElement('div');
+                    infoDiv.className = 'w-full md:w-auto';
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'font-medium text-gray-800';
+                    nameSpan.textContent = db.name;
+                    const descP = document.createElement('p');
+                    descP.className = 'text-sm text-gray-500';
+                    descP.textContent = db.description || 'No description';
+                    infoDiv.appendChild(nameSpan);
+                    infoDiv.appendChild(descP);
+
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.className = 'flex items-center gap-2 w-full md:w-auto justify-end flex-wrap';
+                    const openLink = document.createElement('a');
+                    openLink.href = `/app/database/${db.name}`;
+                    openLink.className = 'open-btn text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-md hover:bg-blue-200 font-semibold';
+                    openLink.textContent = 'Open';
+                    const exportBtn = document.createElement('button');
+                    exportBtn.dataset.dbId = db.id;
+                    exportBtn.dataset.dbName = db.name;
+                    exportBtn.className = 'export-sql-btn text-sm bg-gray-200 px-3 py-1 rounded-md hover:bg-gray-300';
+                    exportBtn.textContent = 'Export SQL';
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'delete-btn text-sm bg-red-100 text-red-700 px-3 py-1 rounded-md hover:bg-red-200';
+                    deleteBtn.textContent = 'Delete';
+                    actionsDiv.append(openLink, exportBtn, deleteBtn);
+
+                    dbElement.appendChild(infoDiv);
+                    dbElement.appendChild(actionsDiv);
+                    dbList.appendChild(dbElement);
+                });
+            }
+
+            async function handleCreateDatabase(e) {
+                e.preventDefault();
+                const name = newDbNameInput.value.trim();
+                const description = newDbDescInput.value.trim();
+                if (!name) return;
+
+                try {
+                    const response = await fetchWithAuth('/api/v1/databases', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, description }),
+                    });
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Failed to create database');
+                    }
+                    fetchDatabases(); // Re-fetch the list
+                    newDbNameInput.value = '';
+                    newDbDescInput.value = '';
+                } catch (error) {
+                    alert(`Error: ${error.message}`);
+                }
+            }
+
+            async function handleDeleteDatabase() {
+                if (!dbToDeleteId) return;
+                try {
+                    const response = await fetchWithAuth(`/api/v1/databases/${dbToDeleteId}`, { method: 'DELETE' });
+                    // A 204 No Content means success. Any other status is an error.
+                    if (response.status !== 204) {
+                        // Try to get a detailed error message from the API response body.
+                        let errorDetail = `Failed to delete database. Status: ${response.status}`;
+                        try {
+                            const err = await response.json();
+                            errorDetail = err.detail || errorDetail;
+                        } catch (e) { /* Ignore if body is not JSON */ }
+                        throw new Error(errorDetail);
+                    }
+                    // On success, refresh the list and close the modal.
+                    fetchDatabases();
+                    closeModal(deleteModal);
+                } catch (error) {
+                    alert(`Error: ${error.message}`);
+                }
+            }
+
+            async function handleExportSql(dbId, dbName, exportBtn) {
+                try {
+                    exportBtn.textContent = 'Exporting...';
+                    exportBtn.disabled = true;
+                    const response = await fetchWithAuth(`/api/v1/databases/${dbId}/export-sql`);
+                    if (!response.ok) throw new Error('Failed to export SQL');
+                    
+                    const sqlText = await response.text();
+                    const blob = new Blob([sqlText], { type: 'application/sql' });
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.style.display = 'none';
+                    link.href = url;
+                    link.download = `${dbName}_dump.sql`;
+                    document.body.appendChild(link);
+                    link.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(link);
+                } catch (error) {
+                    alert(`Error exporting SQL: ${error.message}`);
+                } finally {
+                    exportBtn.textContent = 'Export SQL';
+                    exportBtn.disabled = false;
+                }
+            }
+
+            async function handleImportSql(e) {
+                e.preventDefault();
+                const name = document.getElementById('import-db-name').value.trim();
+                const description = document.getElementById('import-db-desc').value.trim();
+                const script = sqlScriptTextarea.value.trim();
+
+                if (!name || !script) {
+                    alert('Database name and SQL script are required.');
+                    return;
+                }
+
+                submitImportSqlBtn.disabled = true;
+                submitImportSqlBtn.textContent = 'Importing...';
+
+                try {
+                    const response = await fetchWithAuth('/api/v1/databases/import-sql', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, description, script }),
+                    });
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Failed to import database');
+                    }
+                    closeModal(importSqlModal);
+                    fetchDatabases(); // Re-fetch the list
+                } catch (error) {
+                    alert(`Error: ${error.message}`);
+                } finally {
+                    submitImportSqlBtn.disabled = false;
+                    submitImportSqlBtn.textContent = 'Import Database';
+                }
+            }
+
+            dbList.addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.delete-btn');
+                if (deleteBtn) {
+                    const dbItem = deleteBtn.closest('[data-id]');
+                    dbToDeleteId = dbItem.dataset.id;
+                    const dbName = dbItem.querySelector('span.font-medium').textContent;
+                    modalDbName.textContent = dbName;
+                    deleteModal.classList.remove('hidden');
+                    setTimeout(() => deleteModal.classList.remove('opacity-0'), 10);
+                    return; // Stop further processing
+                }
+
+                const exportBtn = e.target.closest('.export-sql-btn');
+                if (exportBtn) {
+                    const dbId = exportBtn.dataset.dbId;
+                    const dbName = exportBtn.dataset.dbName;
+                    handleExportSql(dbId, dbName, exportBtn);
+                }
+            });
+
+            createDbForm.addEventListener('submit', handleCreateDatabase);
+            cancelDeleteBtn.addEventListener('click', () => closeModal(deleteModal));
+            confirmDeleteBtn.addEventListener('click', handleDeleteDatabase);
+            
+            importSqlBtn.addEventListener('click', () => {
+                importSqlForm.reset();
+                openModal(importSqlModal);
+            });
+
+            cancelImportSqlBtn.addEventListener('click', () => closeModal(importSqlModal));
+            importSqlForm.addEventListener('submit', handleImportSql);
+
+            sqlFileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => { sqlScriptTextarea.value = event.target.result; };
+                    reader.readAsText(file);
+                }
+            });
+
+            newDbNameInput.addEventListener('input', () => {
+                const isValid = newDbNameInput.checkValidity();
+                dbNameError.classList.toggle('hidden', isValid);
+            });
+
+            profileBtn.addEventListener('click', () => {
+                profileDropdown.classList.toggle('hidden');
+            });
+
+
+            signOutBtn.addEventListener('click', async () => {
+                await supabase.auth.signOut(); // This clears the session from storage
+                window.location.href = '/login';
+            });
+
+            // Initial Load
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+                    if (session) {
+                        const user = session.user;
+                        const fullName = user.user_metadata?.full_name;
+                        
+                        // Populate profile dropdown
+                        document.getElementById('profile-btn').textContent = getInitials(fullName);
+                        document.getElementById('profile-name').textContent = fullName || 'User';
+                        document.getElementById('profile-email').textContent = user.email;
+
+                        // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
+                        if (!initialDataLoaded) {
+                            fetchSubscriptionStatus();
+                            fetchDatabases();
+                        }
+                    } else {
+                        window.location.href = '/login';
+                    }
+                } else if (event === 'SIGNED_OUT') {
                     window.location.href = '/login';
                 }
-            } else if (event === 'SIGNED_OUT') {
-                window.location.href = '/login';
-            }
+            });
         });
-    });
-</script>
+    </script>
 </body>
 </html>
