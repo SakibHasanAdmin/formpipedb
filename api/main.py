@@ -1461,6 +1461,62 @@ async def create_checkout(variantId: str, auth_details: dict = Depends(get_curre
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
+@app.get("/api/v1/create-checkout")
+async def create_checkout(variantId: str, auth_details: dict = Depends(get_current_user_details)):
+    """
+    Creates a Lemon Squeezy checkout session for the current user.
+    """
+    user = auth_details["user"]
+    if not all([LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID]):
+        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
+
+    headers = {
+        'Accept': 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
+    }
+    payload = {
+        "data": {
+            "type": "checkouts",
+            "attributes": {
+                "checkout_data": {
+                    "email": user.email,
+                    "custom": {
+                        "user_id": str(user.id)
+                    }
+                }
+            },
+            "relationships": {
+                "store": {
+                    "data": {
+                        "type": "stores",
+                        "id": str(LEMON_SQUEEZY_STORE_ID)
+                    }
+                },
+                "variant": {
+                    "data": {
+                        "type": "variants",
+                        "id": str(variantId)
+                    }
+                }
+            }
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post('https://api.lemonsqueezy.com/v1/checkouts', headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            checkout_url = data.get('data', {}).get('attributes', {}).get('url')
+            if not checkout_url:
+                raise HTTPException(status_code=500, detail="Could not retrieve checkout URL from Lemon Squeezy.")
+            return {"checkout_url": checkout_url}
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=e.response.status_code, detail=f"Error from billing provider: {e.response.text}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
 @app.post("/api/v1/lemonsqueezy-webhook")
 async def lemonsqueezy_webhook(request: Request):
     """

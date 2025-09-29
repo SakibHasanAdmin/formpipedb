@@ -193,12 +193,12 @@
                     const data = await response.json();
             
                     if (data.plan_id === 'pro') {
-                        banner.href = '/app/subscription';
+                        banner.href = '/app/subscription'; // Link to manage subscription
                         banner.textContent = '🚀 Pro Plan';
                         banner.className += ' bg-blue-100 text-blue-800 hover:bg-blue-200';
                     } else { // Free or any other status
-                        banner.href = '/pricing';
-                        banner.textContent = '✨ Upgrade to Pro';
+                        banner.href = '/app/subscription'; // Link to upgrade page
+                        banner.textContent = '✨ Upgrade to Pro'; 
                         banner.className += ' bg-green-100 text-green-800 hover:bg-green-200';
                     }
                 } catch (error) {
