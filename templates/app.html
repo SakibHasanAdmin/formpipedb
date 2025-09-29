@@ -23,8 +23,8 @@
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
             <div class="flex items-center gap-4">
                 <a href="/app/subscription" id="subscription-status-banner" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors mr-4">
-            Loading Plan...
-        </a>
+                    Loading Plan...
+                </a>
                 <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <!-- Initials will be inserted here by JS -->
                 </button>
@@ -183,27 +183,30 @@
                 return session.access_token;
             }
 
-            async function fetchSubscriptionStatus() { // --- FIX: Use correct endpoint and logic ---
-                const banner = document.getElementById('subscription-status-banner');
-                if (!banner) return;
-
+            async function fetchSubscriptionStatus() {
                 try {
                     const response = await fetchWithAuth('/api/v1/subscription-details');
-                    if (!response.ok) throw new Error('Failed to fetch subscription status');
+                    if (!response.ok) {
+                        // Silently fail without breaking the UI if the endpoint has an issue
+                        console.error('Could not fetch subscription status');
+                        return;
+                    }
                     const data = await response.json();
+                    const banner = document.getElementById('subscription-status-banner');
 
-                    if (data.plan_id !== 'pro') { // This means the user is on the Free plan
+                    if (data.plan_id === 'free') {
                         banner.textContent = '✨ Upgrade to Pro';
-                        banner.href = '/app/subscription';
-                        banner.className += ' bg-green-100 text-green-800 hover:bg-green-200';
-                    } else { // This means the user is on the Pro plan
+                        banner.href = '/pricing';
+                        banner.className = 'px-4 py-2 rounded-md text-sm font-semibold transition-colors mr-4 bg-green-100 text-green-800 hover:bg-green-200';
+                    } else {
                         banner.textContent = '🚀 Pro Plan';
                         banner.href = '/app/subscription';
                         banner.className = 'px-4 py-2 rounded-md text-sm font-semibold transition-colors mr-4 bg-blue-100 text-blue-800 hover:bg-blue-200';
                     }
-                } catch (error) { // --- FIX: Hide banner on error ---
+                } catch (error) {
                     console.error('Error fetching subscription status:', error);
-                    banner.style.display = 'none'; // Hide banner on error
+                    const banner = document.getElementById('subscription-status-banner');
+                    banner.textContent = 'Plan Status'; // Fallback text on error
                 }
             }
 
@@ -468,7 +471,7 @@
                         // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
                         if (!initialDataLoaded) {
                             fetchSubscriptionStatus();
-                            fetchDatabases();
+                            fetchSubscriptionStatus();
                         }
                     } else {
                         window.location.href = '/login';
