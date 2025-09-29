@@ -50,9 +50,54 @@
                 return;
             }
 
-            // Placeholder for future logic
-            subscriptionDetails.innerHTML = '<p class="text-gray-800">Subscription details will be displayed here.</p>';
+            /**
+             * A wrapper for the native fetch function that automatically includes
+             * the Supabase authentication token.
+             */
+            async function fetchWithAuth(url, options = {}) {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) {
+                    window.location.href = '/login'; // Redirect if no session
+                    throw new Error("User not authenticated.");
+                }
+                const headers = { ...options.headers, 'Authorization': `Bearer ${session.access_token}` };
+                return fetch(url, { ...options, headers });
+            }
 
+            async function loadSubscriptionStatus() {
+                try {
+                    const response = await fetchWithAuth('/api/v1/subscription-details');
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Failed to load subscription details.');
+                    }
+                    const data = await response.json();
+
+                    if (data.plan_id === 'free') {
+                        subscriptionDetails.innerHTML = `
+                            <div class="text-center">
+                                <p class="text-xl text-gray-800">You are on the <span class="font-bold text-blue-600">Free Tier</span>.</p>
+                                <p class="text-gray-600 mt-2">Click below to upgrade and unlock powerful features.</p>
+                                <button id="upgrade-button" class="mt-6 bg-green-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-green-700 transition-transform hover:scale-105">
+                                    ✨ Upgrade to Pro
+                                </button>
+                            </div>
+                        `;
+                    } else if (data.plan_id === 'pro') {
+                        subscriptionDetails.innerHTML = `
+                            <div class="text-center">
+                                <p class="text-xl text-gray-800">You are on the <span class="font-bold text-green-600">Pro Tier</span>.</p>
+                                <p class="text-gray-600 mt-2">Your subscription is currently active.</p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('Error loading subscription:', error);
+                    subscriptionDetails.innerHTML = `<p class="text-red-600 text-center">Error: ${error.message}</p>`;
+                }
+            }
+
+            loadSubscriptionStatus();
         });
     </script>
 </body>
