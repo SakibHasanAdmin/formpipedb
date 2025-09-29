@@ -1411,8 +1411,21 @@ async def create_checkout(variantId: str, auth_details: dict = Depends(get_curre
     Creates a Lemon Squeezy checkout session for the current user.
     """
     user = auth_details["user"]
-    if not all([LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID]):
+    if not all([LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID, SUPABASE_SERVICE_KEY]):
         raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
+
+    # --- FORCE CHANGE: Fetch the user's current email directly from the database ---
+    # This prevents using a stale email from the JWT if the user recently updated it.
+    try:
+        supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        user_data_res = supabase_admin.table("users").select("email").eq("id", user.id).single().execute()
+        if not user_data_res.data or not user_data_res.data.get("email"):
+            raise HTTPException(status_code=404, detail="Could not retrieve current user email.")
+        current_user_email = user_data_res.data["email"]
+    except APIError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user details for checkout: {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred while fetching user details: {str(e)}")
 
     headers = {
         'Accept': 'application/vnd.api+json',
@@ -1424,7 +1437,7 @@ async def create_checkout(variantId: str, auth_details: dict = Depends(get_curre
             "type": "checkouts",
             "attributes": {
                 "checkout_data": {
-                    "email": user.email,
+                    "email": current_user_email,
                     "custom": {
                         "user_id": str(user.id)
                     }
