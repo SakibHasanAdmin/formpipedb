@@ -183,7 +183,7 @@
                 return session.access_token;
             }
 
-            async function fetchSubscriptionStatus() { // --- FIX: Use correct endpoint and logic ---
+            async function fetchSubscriptionStatus() {
                 const banner = document.getElementById('subscription-status-banner');
                 if (!banner) return;
 
@@ -191,7 +191,7 @@
                     const response = await fetchWithAuth('/api/v1/subscription-details');
                     if (!response.ok) throw new Error('Failed to fetch subscription status');
                     const data = await response.json();
-
+            
                     if (data.plan_id === 'pro') {
                         banner.href = '/app/subscription';
                         banner.textContent = '🚀 Pro Plan';
@@ -201,7 +201,7 @@
                         banner.textContent = '✨ Upgrade to Pro';
                         banner.className += ' bg-green-100 text-green-800 hover:bg-green-200';
                     }
-                } catch (error) { // --- FIX: Hide banner on error ---
+                } catch (error) {
                     console.error('Error fetching subscription status:', error);
                     banner.style.display = 'none'; // Hide banner on error
                 }
