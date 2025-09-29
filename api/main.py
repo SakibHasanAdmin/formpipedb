@@ -3,6 +3,9 @@
 
 import os
 import asyncio
+import hmac
+import hashlib
+import json
 from functools import partial
 from pathlib import Path
 import io, csv
@@ -26,6 +29,9 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 HCAPTCHA_SITE_KEY = os.environ.get("HCAPTCHA_SITE_KEY")
 SITE_URL = os.environ.get("SITE_URL")
+LEMON_SQUEEZY_API_KEY = os.environ.get("LEMON_SQUEEZY_API_KEY")
+LEMON_SQUEEZY_STORE_ID = os.environ.get("LEMON_SQUEEZY_STORE_ID")
+LEMON_SQUEEZY_WEBHOOK_SECRET = os.environ.get("LEMON_SQUEEZY_WEBHOOK_SECRET")
 
 # Get the root directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -1417,6 +1423,105 @@ async def get_subscription_details(auth_details: dict = Depends(get_current_user
             return SubscriptionDetailsResponse(plan_id='free')
             
     except APIError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"API Error: {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
+
+@app.get("/api/v1/create-checkout")
+async def create_checkout(variantId: str, auth_details: dict = Depends(get_current_user_details)):
+    """
+    Creates a Lemon Squeezy checkout session for the current user.
+    """
+    user = auth_details["user"]
+    if not all([LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID]):
+        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
+
+    headers = {
+        'Accept': 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
+    }
+    payload = {
+        "data": {
+            "type": "checkouts",
+            "attributes": {
+                "checkout_data": {
+                    "email": user.email,
+                    "custom": {
+                        "user_id": str(user.id)
+                    }
+                }
+            },
+            "relationships": {
+                "store": {
+                    "data": {
+                        "type": "stores",
+                        "id": str(LEMON_SQUEEZY_STORE_ID)
+                    }
+                },
+                "variant": {
+                    "data": {
+                        "type": "variants",
+                        "id": str(variantId)
+                    }
+                }
+            }
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post('https://api.lemonsqueezy.com/v1/checkouts', headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            checkout_url = data.get('data', {}).get('attributes', {}).get('url')
+            if not checkout_url:
+                raise HTTPException(status_code=500, detail="Could not retrieve checkout URL from Lemon Squeezy.")
+            return {"checkout_url": checkout_url}
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=e.response.status_code, detail=f"Error from billing provider: {e.response.text}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+@app.post("/api/v1/lemonsqueezy-webhook")
+async def lemonsqueezy_webhook(request: Request):
+    """
+    Handles webhook notifications from Lemon Squeezy to update subscription statuses.
+    """
+    if not LEMON_SQUEEZY_WEBHOOK_SECRET:
+        raise HTTPException(status_code=500, detail="Webhook secret not configured.")
+
+    # 1. Verify the signature
+    signature = request.headers.get('X-Signature')
+    raw_body = await request.body()
+    if not signature:
+        raise HTTPException(status_code=400, detail="Missing X-Signature header.")
+
+    h = hmac.new(LEMON_SQUEEZY_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256)
+    if not hmac.compare_digest(h.hexdigest(), signature):
+        raise HTTPException(status_code=400, detail="Invalid signature.")
+
+    # 2. Process the event
+    try:
+        payload = json.loads(raw_body)
+        event_name = payload.get('meta', {}).get('event_name')
+        user_id = payload.get('meta', {}).get('custom_data', {}).get('user_id')
+
+        if not user_id:
+            return {"status": "ok", "message": "Webhook received, but no user_id found in custom_data. Nothing to do."}
+
+        supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+        if event_name in ('subscription_created', 'order_created'):
+            # Upsert a 'pro' subscription for the user
+            supabase_admin.table('user_subscriptions').upsert({
+                'user_id': user_id,
+                'plan_id': 'pro',
+                'status': 'active'
+            }).execute()
+
+        return {"status": "ok", "message": f"Processed event: {event_name}"}
+    except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"API Error: {e.message}")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
