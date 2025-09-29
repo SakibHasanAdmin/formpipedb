@@ -1,4 +1,128 @@
-<script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - FormPipeDB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/static/images/favicon.ico">
+    <style> 
+        body { font-family: 'Inter', sans-serif; }
+        .modal { transition: opacity 0.25s ease; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
+            <div class="flex items-center gap-4">
+                <a href="/app/subscription" id="subscription-status-banner" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors mr-4">
+                    Loading Plan...
+                </a>
+                <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <!-- Initials will be inserted here by JS -->
+                </button>
+                <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-10">
+                    <div class="px-4 py-2 border-b">
+                        <p id="profile-name" class="text-sm font-medium text-gray-900 truncate">Loading...</p>
+                        <p id="profile-email" class="text-sm text-gray-500 truncate">...</p>
+                    </div>
+                    <div class="py-1">
+                        <a href="#" id="sign-out-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign Out</a>
+                        <a href="/confirm-delete" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50">Delete Account</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-12">
+        <h1 class="text-3xl font-bold text-gray-800 mb-8">My Databases</h1>
+
+        <!-- Create New Database -->
+        <section class="mb-12 bg-white p-6 rounded-lg shadow-sm border">
+            <h2 class="text-xl font-semibold mb-4">Create or Import Database</h2>
+            <div class="flex flex-col md:flex-row items-center gap-4">
+                <form id="create-db-form" class="w-full flex-grow flex flex-col md:flex-row items-center gap-4">
+                    <input id="new-db-name" type="text" placeholder="project_alpha" required pattern="^[a-z0-9_]+$" title="Use only lowercase letters, numbers, and underscores." class="w-full md:w-1/3 p-2 border rounded-md focus:ring-2 focus:ring-blue-500 outline-none" autocomplete="off">
+                    <p id="db-name-error" class="text-red-600 text-xs mt-1 hidden">Only lowercase letters, numbers, and underscores are allowed.</p>
+                    <input id="new-db-desc" type="text" placeholder="Description (optional)" class="w-full md:flex-grow p-2 border rounded-md focus:ring-2 focus:ring-blue-500 outline-none" autocomplete="off">
+                    <button type="submit" class="w-full md:w-auto bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Create</button>
+                </form>
+                <!-- --- FIX: Move Import button and divider outside the form --- -->
+                <div class="text-gray-400 hidden lg:block">or</div>
+                <div class="w-full md:w-auto flex items-center gap-2 text-gray-400 md:hidden">
+                    <hr class="flex-grow border-t"><span class="text-sm">OR</span><hr class="flex-grow border-t">
+                </div>
+                <button id="import-sql-btn" class="w-full md:w-auto bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 whitespace-nowrap">Import SQL...</button>
+            </div>
+        </section>
+
+        <!-- Manage Existing Databases -->
+        <section>
+            <h2 class="text-xl font-semibold mb-4">Manage Existing Databases</h2>
+            <div id="db-list" class="space-y-4">
+                <div id="db-list-placeholder" class="text-center py-10 text-gray-500">
+                    Loading databases...
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 class="text-lg font-semibold mb-4">Confirm Deletion</h3>
+            <p>Are you sure you want to delete the database "<strong id="modal-db-name"></strong>"? This action cannot be undone.</p>
+            <div class="mt-6 flex justify-end gap-4">
+                <button id="cancel-delete-btn" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+                <button id="confirm-delete-btn" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import SQL Modal -->
+    <div id="import-sql-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
+        <form id="import-sql-form" class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div class="p-6 border-b">
+                <h3 class="text-xl font-semibold">Import Database from SQL</h3>
+            </div>
+            <div class="p-6 space-y-4 overflow-y-auto">
+                <div>
+                    <label for="import-db-name" class="block text-sm font-medium text-gray-700">New Database Name</label>
+                    <input id="import-db-name" type="text" placeholder="imported_database" required class="mt-1 w-full p-2 border rounded-md" autocomplete="off" />
+                </div>
+                <div>
+                    <label for="import-db-desc" class="block text-sm font-medium text-gray-700">Description (optional)</label>
+                    <input id="import-db-desc" type="text" class="mt-1 w-full p-2 border rounded-md" autocomplete="off" />
+                </div>
+                <div>
+                    <label for="import-sql-script" class="block text-sm font-medium text-gray-700">SQL Script</label>
+                    <p class="text-xs text-gray-500 mb-2">Paste your SQL script below or upload a .sql/.txt file. The parser supports simple CREATE TABLE and INSERT INTO statements.</p>
+                    <div class="bg-gray-900 text-white p-2 rounded-md font-mono text-sm">
+                        <textarea id="import-sql-script" required class="w-full h-64 bg-transparent text-white outline-none resize-vertical" placeholder="CREATE TABLE users (...);"></textarea>
+                    </div>
+                </div>
+                <div>
+                    <label for="sql-file-input" class="block text-sm font-medium text-gray-700">Or Upload File</label>
+                    <input id="sql-file-input" type="file" accept=".sql,.txt" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+            </div>
+            <div class="p-6 mt-auto border-t bg-gray-50 flex justify-end gap-4">
+                <button id="cancel-import-sql-btn" type="button" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+                <button id="submit-import-sql-btn" type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Import Database</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
     const supabaseUrl = '{{ supabase_url }}';
     const supabaseAnonKey = '{{ supabase_anon_key }}';
     const supabase = supabaseUrl && supabaseAnonKey ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
