@@ -145,7 +145,8 @@ class SqlTableCreateRequest(BaseModel):
     script: str
 
 class SubscriptionStatusResponse(BaseModel):
-    status: str
+    plan_id: str
+    status: str # e.g., 'active', 'free'
 
 class SubscriptionDetailsResponse(BaseModel):
     plan_id: str
@@ -1380,29 +1381,6 @@ async def get_all_database_data(database_id: int, auth_details: dict = Depends(g
 
     return all_data
 
-@app.get("/api/v1/subscription-status", response_model=SubscriptionStatusResponse)
-async def get_subscription_status(auth_details: dict = Depends(get_current_user_details)):
-    """
-    Checks the current user's subscription status.
-    """
-    supabase = auth_details["client"]
-    user = auth_details["user"]
-    try:
-        # RLS on the subscriptions table should ensure we only get the user's own subscription.
-        response = supabase.table("subscriptions").select("status").eq("user_id", user.id).eq("status", "active").maybe_single().execute()
-        
-        if response.data:
-            return SubscriptionStatusResponse(status="Pro")
-        else:
-            return SubscriptionStatusResponse(status="Free")
-            
-    except APIError as e:
-        # If there's an error (e.g., table doesn't exist), gracefully fall back to "Free"
-        print(f"Could not check subscription status, falling back to Free. Error: {e.message}")
-        return SubscriptionStatusResponse(status="Free")
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
-
 @app.get("/api/v1/subscription-details", response_model=SubscriptionDetailsResponse)
 async def get_subscription_details(auth_details: dict = Depends(get_current_user_details)):
     """
@@ -1413,14 +1391,14 @@ async def get_subscription_details(auth_details: dict = Depends(get_current_user
     user = auth_details["user"]
     try:
         # RLS on the user_subscriptions table should ensure we only get the user's own subscription.
-        response = supabase.table("user_subscriptions").select("plan_id").eq("user_id", user.id).maybe_single().execute()
+        response = supabase.table("user_subscriptions").select("plan_id, status").eq("user_id", user.id).maybe_single().execute()
         
         if response and response.data:
-            return SubscriptionDetailsResponse(plan_id=response.data['plan_id'])
+            return SubscriptionDetailsResponse(plan_id=response.data.get('plan_id', 'free'), status=response.data.get('status', 'active'))
         else:
             # If no subscription record exists (e.g., for a new user),
             # gracefully return the 'free' plan by default.
-            return SubscriptionDetailsResponse(plan_id='free')
+            return SubscriptionDetailsResponse(plan_id='free', status='active')
             
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"API Error: {e.message}")
@@ -1507,18 +1485,23 @@ async def lemonsqueezy_webhook(request: Request):
         event_name = payload.get('meta', {}).get('event_name')
         user_id = payload.get('meta', {}).get('custom_data', {}).get('user_id')
 
-        if not user_id:
+        if not user_id: # pragma: no cover
             return {"status": "ok", "message": "Webhook received, but no user_id found in custom_data. Nothing to do."}
 
         supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-        if event_name in ('subscription_created', 'order_created'):
-            # Upsert a 'pro' subscription for the user
-            supabase_admin.table('user_subscriptions').upsert({
-                'user_id': user_id,
-                'plan_id': 'pro',
-                'status': 'active'
-            }).execute()
+        # Handle both new subscriptions and one-time lifetime purchases
+        if event_name == 'subscription_created':
+            # Upsert a 'pro' subscription for the user for recurring plans
+            supabase_admin.table('user_subscriptions').upsert({ 'user_id': user_id, 'plan_id': 'pro', 'status': 'active' }).execute()
+
+        elif event_name == 'order_created':
+            # This handles one-time purchases (e.g., lifetime deal)
+            order_status = payload.get('data', {}).get('attributes', {}).get('status')
+            if order_status == 'paid':
+                # Upsert a 'pro' subscription for the user
+                supabase_admin.table('user_subscriptions').upsert({ 'user_id': user_id, 'plan_id': 'pro', 'status': 'active' }).execute()
+
 
         return {"status": "ok", "message": f"Processed event: {event_name}"}
     except Exception as e:
