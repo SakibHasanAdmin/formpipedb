@@ -1408,7 +1408,7 @@ async def get_subscription_details(auth_details: dict = Depends(get_current_user
         # RLS on the user_subscriptions table should ensure we only get the user's own subscription.
         response = supabase.table("user_subscriptions").select("plan_id").eq("user_id", user.id).maybe_single().execute()
         
-        if response.data:
+        if response and response.data:
             return SubscriptionDetailsResponse(plan_id=response.data['plan_id'])
         else:
             # If no subscription record exists (e.g., for a new user),
