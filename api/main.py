@@ -1522,8 +1522,17 @@ async def app_page(request: Request):
 
 @app.get("/app/subscription", response_class=HTMLResponse)
 async def subscription_page(request: Request):
+    """
+    Serves the subscription management page and passes Supabase credentials.
+    """
     return templates.TemplateResponse(
-        "subscription.html", {"request": request})
+        "subscription.html", 
+        {
+            "request": request,
+            "supabase_url": SUPABASE_URL,
+            "supabase_anon_key": SUPABASE_ANON_KEY
+        }
+    )
 
 @app.get("/app/database/{db_name}", response_class=HTMLResponse)
 async def table_manager_page(request: Request, db_name: str):
