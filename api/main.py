@@ -143,7 +143,6 @@ class SubscriptionStatusResponse(BaseModel):
 
 class SubscriptionDetailsResponse(BaseModel):
     plan_id: str
-    status: Optional[str] = None
 
 # --- FIX: Conditionally use EmailStr to prevent crash if 'email-validator' is not installed ---
 try:
@@ -1400,19 +1399,21 @@ async def get_subscription_status(auth_details: dict = Depends(get_current_user_
 @app.get("/api/v1/subscription-details", response_model=SubscriptionDetailsResponse)
 async def get_subscription_details(auth_details: dict = Depends(get_current_user_details)):
     """
-    Fetches the detailed subscription plan and status for the current user.
+    Fetches the subscription plan for the current user.
+    If no subscription record is found, it defaults to the 'free' plan.
     """
     supabase = auth_details["client"]
     user = auth_details["user"]
     try:
         # RLS on the user_subscriptions table should ensure we only get the user's own subscription.
-        response = supabase.table("user_subscriptions").select("plan_id, status").eq("user_id", user.id).maybe_single().execute()
+        response = supabase.table("user_subscriptions").select("plan_id").eq("user_id", user.id).maybe_single().execute()
         
         if response.data:
-            return response.data
+            return SubscriptionDetailsResponse(plan_id=response.data['plan_id'])
         else:
-            # Per requirements, every user should have a default plan record.
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found for user.")
+            # If no subscription record exists (e.g., for a new user),
+            # gracefully return the 'free' plan by default.
+            return SubscriptionDetailsResponse(plan_id='free')
             
     except APIError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"API Error: {e.message}")
