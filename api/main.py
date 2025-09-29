@@ -191,14 +191,8 @@ async def get_current_user_details(authorization: str = Header(None)) -> dict:
         # Explicitly validate the JWT to ensure it's not expired or tampered with by fetching the user.
         # This call to Supabase Auth also returns the user's details.
         user_response = await asyncio.to_thread(supabase.auth.get_user, token)
-        
-        # --- FORCE CHANGE: Refresh the user object to get the latest data from the database ---
-        # This ensures that any recent changes (like an email update) are reflected.
-        # We use the existing authenticated client, which holds the user's session.
-        # The refresh_session method is part of the gotrue-py library and uses the refresh token
-        # stored in the session to get a fresh user object and new tokens.
-        refreshed_session_response = await asyncio.to_thread(supabase.auth.refresh_session)
-        user = refreshed_session_response.user
+        user = user_response.user
+
 
         if not user:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid token or user not found")
