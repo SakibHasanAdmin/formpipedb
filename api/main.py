@@ -1393,8 +1393,12 @@ async def get_subscription_details(auth_details: dict = Depends(get_current_user
         # RLS on the user_subscriptions table should ensure we only get the user's own subscription.
         response = supabase.table("user_subscriptions").select("plan_id, status").eq("user_id", user.id).maybe_single().execute()
 
-        if response and response.data and response.data.get('status') == 'active':
-            return SubscriptionDetailsResponse(plan_id=response.data.get('plan_id', 'free'))
+        # --- FIX: Correctly handle the response to always return the SubscriptionDetailsResponse model ---
+        # If a subscription record exists and is active, return its plan_id.
+        if response and response.data and response.data.get("status") == "active":
+            # The response.data is a dictionary. We need to construct the Pydantic model from it.
+            plan_id = response.data.get("plan_id", "free")
+            return SubscriptionDetailsResponse(plan_id=plan_id)
         else:
             # If no subscription record exists (e.g., for a new user),
             # gracefully return the 'free' plan by default.
