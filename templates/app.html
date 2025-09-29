@@ -193,13 +193,18 @@
                     const data = await response.json();
             
                     banner.href = '/app/subscription'; // Always link to the subscription page
-
+                    // --- FIX: Use classList.add to avoid overwriting base classes ---
+                    // Clear any color classes that might be there from a previous state.
+                    banner.classList.remove('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200', 'bg-green-100', 'text-green-800', 'hover:bg-green-200');
+ 
                     if (data.plan_id === 'pro') {
                         banner.textContent = '🚀 Pro Plan';
-                        banner.className += ' bg-blue-100 text-blue-800 hover:bg-blue-200';
+                        // Add classes for the "Pro" plan style
+                        banner.classList.add('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200');
                     } else { // Free or any other status
                         banner.textContent = '✨ Upgrade to Pro'; 
-                        banner.className += ' bg-green-100 text-green-800 hover:bg-green-200';
+                        // Add classes for the "Free" plan style
+                        banner.classList.add('bg-green-100', 'text-green-800', 'hover:bg-green-200');
                     }
                 } catch (error) {
                     console.error('Error fetching subscription status:', error);
