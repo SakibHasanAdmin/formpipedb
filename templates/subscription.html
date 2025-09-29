@@ -61,7 +61,7 @@
                 if (!response.ok) throw new Error('Could not load subscription details.');
                 const data = await response.json();
 
-                if (data.plan_id === 'free' || !data.plan_id) {
+                if (data.plan_id !== 'pro') {
                     subscriptionDetails.innerHTML = `
                         <div class="text-center">
                             <p class="text-xl text-gray-800">You are on the <span class="font-bold text-blue-600">Free Tier</span>.</p>

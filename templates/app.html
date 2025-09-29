@@ -192,12 +192,12 @@
                     if (!response.ok) throw new Error('Failed to fetch subscription status');
                     const data = await response.json();
             
+                    banner.href = '/app/subscription'; // Always link to the subscription page
+
                     if (data.plan_id === 'pro') {
-                        banner.href = '/app/subscription'; // Link to manage subscription
                         banner.textContent = '🚀 Pro Plan';
                         banner.className += ' bg-blue-100 text-blue-800 hover:bg-blue-200';
                     } else { // Free or any other status
-                        banner.href = '/app/subscription'; // Link to upgrade page
                         banner.textContent = '✨ Upgrade to Pro'; 
                         banner.className += ' bg-green-100 text-green-800 hover:bg-green-200';
                     }
