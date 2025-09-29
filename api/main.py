@@ -955,6 +955,17 @@ async def _validate_row_data(
     table = TableResponse(**table_res)
 
     for col in table.columns:
+        is_new_row = row_id is None
+
+        # --- FIX: Do not require or validate a value for ANY primary key on a NEW row. ---
+        # This correctly handles auto-incrementing (SERIAL) keys and other database-generated keys.
+        if is_new_row and col.is_primary_key:
+            if col.name in data:
+                # If the frontend sent a placeholder like '(auto)', remove it from the data
+                # that will be sent to the database.
+                del data[col.name]
+            continue # Skip all further validation for this primary key column.
+
         value = data.get(col.name)
 
         # NOT NULL check
