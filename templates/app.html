@@ -21,7 +21,8 @@
     <header class="bg-white shadow-sm">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
-            <div class="relative">
+            <div class="flex items-center gap-4">
+                <a id="subscription-status-banner" href="#" class="px-4 py-2 rounded-md text-sm font-semibold transition-colors"></a>
                 <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <!-- Initials will be inserted here by JS -->
                 </button>
@@ -178,6 +179,30 @@
                     return null;
                 }
                 return session.access_token;
+            }
+
+            async function fetchSubscriptionStatus() {
+                const banner = document.getElementById('subscription-status-banner');
+                if (!banner) return;
+
+                try {
+                    const response = await fetchWithAuth('/api/v1/subscription-status');
+                    if (!response.ok) throw new Error('Failed to fetch subscription status');
+                    const data = await response.json();
+
+                    if (data.status === 'Pro') {
+                        banner.href = '/app/subscription';
+                        banner.textContent = '🚀 Pro Plan';
+                        banner.className += ' bg-blue-100 text-blue-800 hover:bg-blue-200';
+                    } else { // Free or any other status
+                        banner.href = '/pricing'; // Assuming a pricing page exists
+                        banner.textContent = '✨ Upgrade to Pro';
+                        banner.className += ' bg-green-100 text-green-800 hover:bg-green-200';
+                    }
+                } catch (error) {
+                    console.error('Error fetching subscription status:', error);
+                    banner.style.display = 'none'; // Hide banner on error
+                }
             }
 
             function getInitials(fullName) { // --- FIX: Make getInitials more robust ---
@@ -441,6 +466,7 @@
                         // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
                         if (!initialDataLoaded) {
                             fetchDatabases();
+                            fetchSubscriptionStatus();
                         }
                     } else {
                         window.location.href = '/login';
