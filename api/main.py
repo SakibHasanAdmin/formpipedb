@@ -153,14 +153,6 @@ class ContactRequest(BaseModel):
 class AuthenticatedAccountDeletionRequest(BaseModel):
     confirmation: str = Field(..., pattern=r"^delete my account$", description="User must type 'delete my account' to confirm.")
 
-class StatusResponse(BaseModel):
-    status: str
-    message: Optional[str] = None
-
-class SubscriptionResponse(BaseModel):
-    plan: str
-    status: Optional[str] = None
-
 
 
 # --- Reusable Dependencies ---
@@ -215,33 +207,6 @@ def _handle_api_error(e: APIError):
     # For other errors, raise a generic bad request or re-raise a more specific one if needed
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not complete request: {e.message}")
 
-async def require_pro_plan(auth_details: dict = Depends(get_current_user_details)):
-    """
-    Dependency that ensures the current user has an active 'pro' subscription.
-    Raises a 403 Forbidden error if they do not.
-    """
-    supabase = auth_details["client"]
-    try:
-        # Re-using the logic from get_my_subscription
-        response = await asyncio.to_thread(
-            supabase.table("user_subscriptions").select("plan_id, status").limit(1).single().execute
-        )
-        subscription = response.data
-        plan = subscription.get('plan_id', 'free')
-        status = subscription.get('status')
-
-        if plan != 'pro' or status != 'active':
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This feature requires a Pro plan. Please upgrade your account."
-            )
-    except APIError:
-        # This happens if .single() finds no rows, meaning they are on the free plan.
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This feature requires a Pro plan. Please upgrade your account."
-        )
-
 # --- API Endpoints ---
 @app.get("/api/v1/databases", response_model=List[DatabaseResponse])
 async def get_user_databases(auth_details: dict = Depends(get_current_user_details)):
@@ -262,22 +227,6 @@ async def create_user_database(db_data: DatabaseCreate, auth_details: dict = Dep
     """
     try:
         supabase = auth_details["client"]
-
-        # --- FEATURE GATING: Check subscription plan ---
-        # 1. Get user's subscription status.
-        sub_res = await get_my_subscription(auth_details)
-        
-        # 2. If user is on the free plan, check if they already have a database.
-        if sub_res.plan == 'free':
-            count_response = supabase.table("user_databases").select("id", count="exact").execute()
-            if count_response.count >= 1:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="The free plan is limited to one database. Please upgrade to Pro to create more."
-                )
-        # Pro users can proceed without this check.
-        # --- END FEATURE GATING ---
-
         user = auth_details["user"]
         new_db_data = {
             "user_id": user.id,
@@ -589,11 +538,7 @@ async def import_table_from_csv(database_id: int, import_data: CsvImportRequest,
     # but we will manually delete the table if a later step fails.
 
     new_table_id = None
-    
-    # --- FEATURE GATING: Apply Pro plan requirement for this feature ---
-    # This is an example of gating an entire feature.
-    await require_pro_plan(auth_details)
-    
+
     # The user has already reviewed and confirmed the column types in the UI.
     # We receive the final column definitions directly in the payload.
     try:
@@ -649,10 +594,6 @@ async def import_rows_into_table(table_id: int, import_data: CsvRowImportRequest
     """
     supabase = auth_details["client"]
     user = auth_details["user"]
-
-    # --- FEATURE GATING: Apply Pro plan requirement for this feature ---
-    # This is an example of gating an entire feature.
-    await require_pro_plan(auth_details)
 
     try:
         # 1. Get the schema of the target table to know the expected data types
@@ -1111,56 +1052,6 @@ async def delete_own_account(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
-# === Billing and Subscription Endpoints ===
-
-@app.post("/api/v1/billing/create-dummy-checkout", response_model=StatusResponse)
-async def create_dummy_checkout(auth_details: dict = Depends(get_current_user_details)):
-    """
-    DUMMY ENDPOINT: Simulates a successful checkout for the Pro plan.
-    In a real application, this would call Lemon Squeezy to get a checkout URL.
-    Here, we directly create or update the user's subscription to 'pro'.
-    """
-    if not SUPABASE_SERVICE_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Subscription management is not configured on the server. Missing service key."
-        )
-
-    user = auth_details['user']
-    user_id = user.id
-    supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
-    try:
-        # Upsert the subscription: update if exists, insert if not.
-        # This makes the operation idempotent.
-        await asyncio.to_thread(
-            supabase_admin.table("user_subscriptions").upsert({
-                "user_id": user_id,
-                "plan_id": "pro",
-                "status": "active",
-                "updated_at": "now()"
-            }, on_conflict="user_id").execute
-        )
-
-        return {"status": "ok", "message": "Successfully subscribed to Pro plan."}
-    except APIError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=e.message)
-
-
-@app.get("/api/v1/users/me/subscription", response_model=SubscriptionResponse)
-async def get_my_subscription(auth_details: dict = Depends(get_current_user_details)):
-    """
-    Gets the current authenticated user's subscription status.
-    Defaults to the 'free' plan if no subscription is found.
-    """
-    supabase = auth_details["client"]
-    try:
-        response = supabase.table("user_subscriptions").select("plan_id, status").limit(1).single().execute()
-        subscription = response.data
-        return SubscriptionResponse(plan=subscription.get('plan_id', 'free'), status=subscription.get('status'))
-    except APIError:
-        # This error occurs if .single() finds no rows. Default to free plan.
-        return SubscriptionResponse(plan="free", status="active")
 
 @app.get("/api/v1/databases/{database_id}/export-sql", response_class=PlainTextResponse)
 async def export_database_as_sql(database_id: int, auth_details: dict = Depends(get_current_user_details)):
@@ -1453,10 +1344,6 @@ async def get_all_database_data(database_id: int, auth_details: dict = Depends(g
     Used by the SQL Query Builder for client-side data preview.
     """
     supabase = auth_details["client"]
-    
-    # --- FEATURE GATING: Apply Pro plan requirement for this feature ---
-    # This is an example of gating an entire feature.
-    await require_pro_plan(auth_details)
 
     # 1. Verify user has access to the parent database by fetching it.
     # This function already contains the necessary RLS checks.
@@ -1526,16 +1413,6 @@ async def login_page(request: Request):
             "hcaptcha_site_key": HCAPTCHA_SITE_KEY
         }
     )
-
-@app.get("/pricing", response_class=HTMLResponse)
-async def pricing_page(request: Request):
-    return templates.TemplateResponse(
-        "pricing.html", 
-        {
-            "request": request, 
-            "supabase_url": SUPABASE_URL, 
-            "supabase_anon_key": SUPABASE_ANON_KEY
-        })
 
 @app.get("/forgot-password", response_class=HTMLResponse)
 async def forgot_password_page(request: Request):
