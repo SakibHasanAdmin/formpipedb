@@ -191,11 +191,11 @@
                     const data = await response.json();
 
                     if (data.status === 'Pro') {
-                        banner.href = '/subscription';
+                        banner.href = '/app/subscription';
                         banner.textContent = '🚀 Pro Plan';
                         banner.className += ' bg-blue-100 text-blue-800 hover:bg-blue-200';
                     } else { // Free or any other status
-                        banner.href = '/subscription';
+                        banner.href = '/app/subscription';
                         banner.textContent = '✨ Upgrade to Pro';
                         banner.className += ' bg-green-100 text-green-800 hover:bg-green-200';
                     }
