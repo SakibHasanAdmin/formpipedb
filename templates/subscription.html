@@ -21,6 +21,9 @@
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
             <div class="flex items-center gap-4">
+                <a href="/subscription" id="plan-banner-btn" class="hidden text-sm font-semibold px-4 py-2 rounded-full transition-colors whitespace-nowrap">
+                    <!-- Plan name will be inserted here by JS -->
+                </a>
                 <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <!-- Initials will be inserted here by JS -->
                 </button>
@@ -70,7 +73,7 @@
 
                 <!-- Lifetime Plan -->
                 <div class="bg-white p-8 rounded-lg shadow-md border-2 border-indigo-500 flex flex-col relative">
-                    <div class="absolute top-0 -translate-y-1/2 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">BEST VALUE</div>
+                    <span class="absolute top-0 -translate-y-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">BEST VALUE</span>
                     <h2 class="text-2xl font-semibold mb-2">Pro Lifetime</h2>
                     <p class="text-4xl font-bold mb-4">$199<span class="text-lg font-medium text-gray-500"> one-time</span></p>
                     <ul class="space-y-2 text-gray-600 mb-8 flex-grow">
@@ -104,6 +107,15 @@
             const proUserState = document.getElementById('pro-user-state');
             const freeUserState = document.getElementById('free-user-state');
 
+            function getInitials(fullName) {
+                if (!fullName) return '?';
+                const names = fullName.trim().split(' ').filter(name => name.length > 0);
+                if (names.length === 0) return '?';
+                const firstInitial = names[0][0];
+                const lastInitial = names.length > 1 ? names[names.length - 1][0] : '';
+                return (firstInitial + lastInitial).toUpperCase();
+            }
+
             async function fetchWithAuth(url, options = {}) {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session) {
@@ -112,15 +124,6 @@
                 }
                 const headers = { ...options.headers, 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
                 return fetch(url, { ...options, headers });
-            }
-
-            function getInitials(fullName) {
-                if (!fullName) return '?';
-                const names = fullName.trim().split(' ').filter(name => name.length > 0);
-                if (names.length === 0) return '?';
-                const firstInitial = names[0][0];
-                const lastInitial = names.length > 1 ? names[names.length - 1][0] : '';
-                return (firstInitial + lastInitial).toUpperCase();
             }
 
             async function handleCheckout(e) {
@@ -170,7 +173,6 @@
 
             checkoutBtns.forEach(btn => btn.addEventListener('click', handleCheckout));
 
-            // Initial Load
             supabase.auth.onAuthStateChange((event, session) => {
                 if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
                     if (session) {
@@ -178,12 +180,23 @@
                         const userMetadata = user.user_metadata || {};
                         const fullName = userMetadata.full_name;
                         const plan = userMetadata.plan || 'Free';
-                        
+
                         // Populate profile dropdown
                         document.getElementById('profile-btn').textContent = getInitials(fullName);
                         document.getElementById('profile-name').textContent = fullName || 'User';
                         document.getElementById('profile-email').textContent = user.email;
 
+                        // Populate and style the plan banner
+                        const planBannerBtn = document.getElementById('plan-banner-btn');
+                        if (plan.toLowerCase() === 'pro') { // --- FIX: Update plan banner text and behavior ---
+                            planBannerBtn.textContent = 'You are on the Pro Plan';
+                            planBannerBtn.className = 'text-sm font-semibold px-4 py-2 rounded-full transition-colors bg-indigo-100 text-indigo-700 hover:bg-indigo-200';
+                        } else {
+                            planBannerBtn.textContent = 'Upgrade to Pro';
+                            planBannerBtn.className = 'text-sm font-semibold px-4 py-2 rounded-full transition-colors bg-yellow-100 text-yellow-800 hover:bg-yellow-200';
+                        }
+                        planBannerBtn.classList.remove('hidden');
+                        
                         // Show correct page content based on plan
                         loadingState.classList.add('hidden');
                         if (plan.toLowerCase() === 'pro') {
