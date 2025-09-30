@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subscription - FormPipeDB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/static/images/favicon.ico">
+    <style> 
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
+            <div class="flex items-center gap-4">
+                <a href="/subscription" id="plan-banner-btn" class="hidden text-sm font-semibold px-4 py-2 rounded-full transition-colors">
+                    <!-- Plan name will be inserted here by JS -->
+                </a>
+                <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <!-- Initials will be inserted here by JS -->
+                </button>
+                <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-10">
+                    <div class="px-4 py-2 border-b">
+                        <p id="profile-name" class="text-sm font-medium text-gray-900 truncate">Loading...</p>
+                        <p id="profile-email" class="text-sm text-gray-500 truncate">...</p>
+                    </div>
+                    <div class="py-1">
+                        <a href="#" id="sign-out-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign Out</a>
+                        <a href="/confirm-delete" class="block px-4 py-2 text-sm text-red-700 hover:bg-red-50">Delete Account</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-12">
+        <div class="max-w-3xl mx-auto">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">Manage Subscription</h1>
+            <div class="bg-white p-6 rounded-lg shadow-sm border mb-8">
+                <p class="text-lg text-gray-700">You are currently on the <strong id="current-plan" class="text-blue-600">...</strong> tier.</p>
+            </div>
+
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">Upgrade to Pro</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Pro Monthly -->
+                <div class="bg-white p-8 rounded-lg shadow-sm border flex flex-col">
+                    <h3 class="text-xl font-bold text-gray-900">Pro Monthly</h3>
+                    <p class="text-3xl font-bold my-4">$10 <span class="text-base font-medium text-gray-500">/ month</span></p>
+                    <p class="text-gray-600 mb-6 flex-grow">Get full access to all Pro features with a flexible monthly subscription.</p>
+                    <button id="pro-monthly-btn" class="w-full bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 font-semibold">Choose Monthly</button>
+                </div>
+
+                <!-- Pro Lifetime -->
+                <div class="bg-white p-8 rounded-lg shadow-sm border-2 border-indigo-500 flex flex-col relative">
+                    <span class="absolute top-0 -translate-y-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">BEST VALUE</span>
+                    <h3 class="text-xl font-bold text-gray-900">Pro Lifetime Deal</h3>
+                    <p class="text-3xl font-bold my-4">$99 <span class="text-base font-medium text-gray-500">one-time</span></p>
+                    <p class="text-gray-600 mb-6 flex-grow">Pay once and get lifetime access to all current and future Pro features.</p>
+                    <button id="pro-lifetime-btn" class="w-full bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 font-semibold">Choose Lifetime</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const supabaseUrl = '{{ supabase_url }}';
+        const supabaseAnonKey = '{{ supabase_anon_key }}';
+        const supabase = supabaseUrl && supabaseAnonKey ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!supabase) {
+                document.body.innerHTML = '<div class="text-center p-8 text-red-600">Supabase client not configured. Please check your environment variables.</div>';
+                return;
+            }
+
+            const profileBtn = document.getElementById('profile-btn');
+            const profileDropdown = document.getElementById('profile-dropdown');
+            const signOutBtn = document.getElementById('sign-out-btn');
+            const currentPlanEl = document.getElementById('current-plan');
+
+            function getInitials(fullName) {
+                if (!fullName) return '?';
+                const names = fullName.trim().split(' ').filter(name => name.length > 0);
+                if (names.length === 0) return '?';
+                const firstInitial = names[0][0];
+                const lastInitial = names.length > 1 ? names[names.length - 1][0] : '';
+                return (firstInitial + lastInitial).toUpperCase();
+            }
+
+            profileBtn.addEventListener('click', () => {
+                profileDropdown.classList.toggle('hidden');
+            });
+
+            signOutBtn.addEventListener('click', async () => {
+                await supabase.auth.signOut();
+                window.location.href = '/login';
+            });
+
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+                    if (session) {
+                        const user = session.user;
+                        const userMetadata = user.user_metadata || {};
+                        const fullName = userMetadata.full_name;
+                        const plan = userMetadata.plan || 'Free';
+
+                        // Populate profile dropdown
+                        document.getElementById('profile-btn').textContent = getInitials(fullName);
+                        document.getElementById('profile-name').textContent = fullName || 'User';
+                        document.getElementById('profile-email').textContent = user.email;
+
+                        // Populate and style the plan banner
+                        const planBannerBtn = document.getElementById('plan-banner-btn');
+                        if (plan.toLowerCase() === 'pro') {
+                            planBannerBtn.textContent = 'Pro Plan';
+                            planBannerBtn.className = 'text-sm font-semibold px-4 py-2 rounded-full transition-colors bg-indigo-100 text-indigo-700 hover:bg-indigo-200';
+                        } else {
+                            planBannerBtn.textContent = 'Upgrade to Pro';
+                            planBannerBtn.className = 'text-sm font-semibold px-4 py-2 rounded-full transition-colors bg-yellow-100 text-yellow-800 hover:bg-yellow-200';
+                        }
+                        planBannerBtn.classList.remove('hidden');
+
+                        // Update current plan text
+                        currentPlanEl.textContent = plan;
+
+                    } else {
+                        window.location.href = '/login';
+                    }
+                } else if (event === 'SIGNED_OUT') {
+                    window.location.href = '/login';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
