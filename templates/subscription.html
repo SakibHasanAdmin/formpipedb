@@ -49,7 +49,11 @@
         <div id="pro-user-state" class="hidden text-center bg-white p-8 rounded-lg shadow-md border max-w-2xl mx-auto">
             <h1 class="text-3xl font-bold text-gray-800 mb-4">You are on the Pro Plan!</h1>
             <p class="text-gray-600 mb-6">Thank you for your support. You have access to all Pro features.</p>
-            <a href="/app" class="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 font-semibold">Go to Dashboard</a>
+            <div class="flex justify-center gap-4 mt-8">
+                <a href="/app" class="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 font-semibold">Go to Dashboard</a>
+                <!-- --- FIX: Add a button to manage subscription --- -->
+                <button id="manage-subscription-btn" class="bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 font-semibold">Manage Subscription</button>
+            </div>
         </div>
 
         <!-- Free User State -->
@@ -102,6 +106,7 @@
             const profileDropdown = document.getElementById('profile-dropdown');
             const signOutBtn = document.getElementById('sign-out-btn');
             const checkoutBtns = document.querySelectorAll('.checkout-btn');
+            const manageSubscriptionBtn = document.getElementById('manage-subscription-btn');
 
             const loadingState = document.getElementById('loading-state');
             const proUserState = document.getElementById('pro-user-state');
@@ -154,6 +159,31 @@
                 }
             }
 
+            async function handleManageSubscription() {
+                const button = document.getElementById('manage-subscription-btn');
+                button.disabled = true;
+                button.textContent = 'Redirecting...';
+
+                try {
+                    const response = await fetchWithAuth('/api/v1/subscription/customer-portal-url', {
+                        method: 'POST'
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Failed to create customer portal session.');
+                    }
+
+                    const { portal_url } = await response.json();
+                    window.location.href = portal_url;
+
+                } catch (error) {
+                    alert(`Error: ${error.message}`);
+                    button.disabled = false;
+                    button.textContent = 'Manage Subscription';
+                }
+            }
+
             profileBtn.addEventListener('click', () => {
                 profileDropdown.classList.toggle('hidden');
             });
@@ -172,6 +202,7 @@
             });
 
             checkoutBtns.forEach(btn => btn.addEventListener('click', handleCheckout));
+            manageSubscriptionBtn.addEventListener('click', handleManageSubscription);
 
             supabase.auth.onAuthStateChange((event, session) => {
                 if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
@@ -188,7 +219,7 @@
 
                         // Populate and style the plan banner
                         const planBannerBtn = document.getElementById('plan-banner-btn');
-                        if (plan.toLowerCase() === 'pro') { // --- FIX: Update plan banner text and behavior ---
+                        if (plan.toLowerCase() === 'pro') {
                             planBannerBtn.textContent = 'You are on the Pro Plan';
                             planBannerBtn.className = 'text-sm font-semibold px-4 py-2 rounded-full transition-colors bg-indigo-100 text-indigo-700 hover:bg-indigo-200';
                         } else {
