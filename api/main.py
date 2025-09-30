@@ -32,6 +32,8 @@ SITE_URL = os.environ.get("SITE_URL")
 LEMON_SQUEEZY_API_KEY = os.environ.get("LEMON_SQUEEZY_API_KEY")
 LEMON_SQUEEZY_STORE_ID = os.environ.get("LEMON_SQUEEZY_STORE_ID")
 LEMON_SQUEEZY_WEBHOOK_SECRET = os.environ.get("LEMON_SQUEEZY_WEBHOOK_SECRET")
+LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID = os.environ.get("LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID")
+LEMON_SQUEEZY_PRO_LIFETIME_VARIANT_ID = os.environ.get("LEMON_SQUEEZY_PRO_LIFETIME_VARIANT_ID")
 
 # Get the root directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -1594,6 +1596,8 @@ async def confirm_delete_page(request: Request):
             "request": request,
             "supabase_url": SUPABASE_URL,
             "supabase_anon_key": SUPABASE_ANON_KEY,
+            "pro_monthly_variant_id": LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID,
+            "pro_lifetime_variant_id": LEMON_SQUEEZY_PRO_LIFETIME_VARIANT_ID,
         },
     )
 

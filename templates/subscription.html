@@ -73,7 +73,7 @@
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>No-Code Query Builder</li>
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Priority Support</li>
                     </ul>
-                    <button data-variant-id="1017372" class="checkout-btn w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 font-semibold">Get Started</button>
+                    <button data-variant-id="{{ pro_monthly_variant_id }}" class="checkout-btn w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 font-semibold disabled:bg-blue-300 disabled:cursor-not-allowed" disabled>Get Started</button>
                 </div>
 
                 <!-- Lifetime Plan -->
@@ -86,7 +86,7 @@
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Pay once, use forever</li>
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>All future updates included</li>
                     </ul>
-                    <button data-variant-id="1017383" class="checkout-btn w-full bg-indigo-600 text-white py-3 rounded-md hover:bg-indigo-700 font-semibold">Get Lifetime Deal</button>
+                    <button data-variant-id="{{ pro_lifetime_variant_id }}" class="checkout-btn w-full bg-indigo-600 text-white py-3 rounded-md hover:bg-indigo-700 font-semibold disabled:bg-indigo-300 disabled:cursor-not-allowed" disabled>Get Lifetime Deal</button>
                 </div>
             </div>
         </div>
@@ -96,6 +96,8 @@
         const supabaseUrl = '{{ supabase_url }}';
         const supabaseAnonKey = '{{ supabase_anon_key }}';
         const supabase = supabaseUrl && supabaseAnonKey ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
+        const proMonthlyVariantId = '{{ pro_monthly_variant_id }}';
+        const proLifetimeVariantId = '{{ pro_lifetime_variant_id }}';
 
         document.addEventListener('DOMContentLoaded', () => {
             if (!supabase) {
@@ -112,6 +114,13 @@
             const loadingState = document.getElementById('loading-state');
             const proUserState = document.getElementById('pro-user-state');
             const freeUserState = document.getElementById('free-user-state');
+
+            // Enable checkout buttons only if the variant IDs are configured from the backend
+            checkoutBtns.forEach(btn => {
+                if (btn.dataset.variantId) {
+                    btn.disabled = false;
+                }
+            });
 
             function getInitials(fullName) {
                 if (!fullName) return '?';
@@ -156,7 +165,12 @@
                 } catch (error) {
                     alert(`Error: ${error.message}`);
                     button.disabled = false;
-                    button.textContent = button.dataset.variantId === '1017383' ? 'Go Lifetime' : 'Get Started';
+                    // Use the dynamic variant ID for comparison
+                    if (button.dataset.variantId === proLifetimeVariantId) {
+                        button.textContent = 'Get Lifetime Deal';
+                    } else {
+                        button.textContent = 'Get Started';
+                    }
                 }
             }
 
