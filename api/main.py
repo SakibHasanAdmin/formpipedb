@@ -167,10 +167,6 @@ class CheckoutRequest(BaseModel):
 class CheckoutResponse(BaseModel):
     checkout_url: str
 
-class CustomerPortalResponse(BaseModel):
-    portal_url: str
-
-
 
 
 # --- Reusable Dependencies ---
@@ -1472,46 +1468,7 @@ async def create_customer_portal_url(auth_details: dict = Depends(get_current_us
             if not portal_url:
                 raise HTTPException(status_code=500, detail="Could not retrieve customer portal URL.")
 
-            return {"checkout_url": portal_url} # Re-using CheckoutResponse model as it fits the need
-        except httpx.HTTPStatusError as e:
-            print(f"Lemon Squeezy API Error (Customer Portal): {e.response.text}")
-            raise HTTPException(status_code=500, detail=f"Failed to create customer portal session: {e.response.text}")
-        except Exception as e:
-            print(f"An unexpected error occurred: {str(e)}")
-            raise HTTPException(status_code=500, detail="An unexpected error occurred while creating the customer portal session.")
-
-@app.post("/api/v1/subscription/customer-portal-url", response_model=CustomerPortalResponse)
-async def create_customer_portal_url(auth_details: dict = Depends(get_current_user_details)):
-    """
-    Retrieves the customer portal URL for the authenticated user from Lemon Squeezy.
-    """
-    user = auth_details["user"]
-    if not LEMON_SQUEEZY_API_KEY:
-        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
-
-    headers = {
-        "Accept": "application/vnd.api+json",
-        "Authorization": f"Bearer {LEMON_SQUEEZY_API_KEY}",
-    }
-
-    # 1. Find the user's subscription to get the customer portal URL
-    async with httpx.AsyncClient() as client:
-        try:
-            # Find the subscription associated with the user's email
-            # Note: This assumes one subscription per email. For more complex scenarios, you might need to store the subscription_id.
-            subs_response = await client.get(f"https://api.lemonsqueezy.com/v1/subscriptions?filter[user_email]={user.email}", headers=headers)
-            subs_response.raise_for_status()
-            subs_data = subs_response.json()
-
-            if not subs_data.get("data") or len(subs_data["data"]) == 0:
-                raise HTTPException(status_code=404, detail="No active subscription found for this user.")
-
-            # Get the customer portal URL from the first subscription found
-            portal_url = subs_data["data"][0].get("attributes", {}).get("urls", {}).get("customer_portal")
-            if not portal_url:
-                raise HTTPException(status_code=500, detail="Could not retrieve customer portal URL.")
-
-            return {"portal_url": portal_url}
+            return {"checkout_url": portal_url}
         except httpx.HTTPStatusError as e:
             print(f"Lemon Squeezy API Error (Customer Portal): {e.response.text}")
             raise HTTPException(status_code=500, detail=f"Failed to create customer portal session: {e.response.text}")
