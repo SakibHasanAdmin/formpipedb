@@ -61,31 +61,31 @@
                 if (!response.ok) throw new Error('Could not load subscription details.');
                 const data = await response.json();
 
-                if (data.plan_id !== 'pro') {
-                    subscriptionDetails.innerHTML = `
-                        <div class="text-center">
-                            <p class="text-xl text-gray-800">You are on the <span class="font-bold text-blue-600">Free Tier</span>.</p>
-                            <p class="text-gray-600 mt-2">Click below to upgrade and unlock powerful features.</p>
-                            <button data-variant-id="1018622" class="upgrade-button mt-6 bg-green-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-green-700 transition-transform hover:scale-105" data-price-type="monthly">
-                                ✨ Upgrade to Pro ($10/month)
-                            </button>
-                            <button data-variant-id="1018623" class="upgrade-button mt-4 bg-purple-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-purple-700 transition-transform hover:scale-105" data-price-type="lifetime">
-                                ✨ Upgrade to Pro ($99 Lifetime) 
-                            </button>
-                        </div>
-                    `;
-                } else {
+                if (data.plan_id === 'pro') {
                     subscriptionDetails.innerHTML = `
                         <div class="text-center">
                             <p class="text-xl text-gray-800">You are on the <span class="font-bold text-green-600">Pro Tier</span>.</p>
                             <p class="text-gray-600 mt-2">Your subscription is currently active.</p>
                         </div>
                     `;
+                } else {
+                    subscriptionDetails.innerHTML = `
+                        <div class="text-center">
+                            <p class="text-xl text-gray-800">You are on the <span class="font-bold text-blue-600">Free Tier</span>.</p>
+                            <p class="text-gray-600 mt-2">Click below to upgrade and unlock powerful features.</p>
+                            <button data-variant-id="1018622" class="upgrade-button mt-6 bg-green-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-green-700 transition-transform hover:scale-105">
+                                ✨ Upgrade to Pro ($10/month)
+                            </button>
+                            <button data-variant-id="1018623" class="upgrade-button mt-4 bg-purple-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-purple-700 transition-transform hover:scale-105">
+                                ✨ Upgrade to Pro ($99 Lifetime) 
+                            </button>
+                        </div>
+                    `;
+                    
+                    document.querySelectorAll('.upgrade-button').forEach(button => {
+                        button.addEventListener('click', handleUpgradeClick);
+                    });
                 }
-                
-                document.querySelectorAll('.upgrade-button').forEach(button => {
-                    button.addEventListener('click', handleUpgradeClick);
-                });
 
             } catch (error) {
                 subscriptionDetails.innerHTML = `<p class="text-red-600">${error.message}</p>`;
@@ -106,12 +106,7 @@
                 window.location.href = data.checkout_url;
             } catch (error) {
                 alert(error.message);
-                // Reset button text based on which one was clicked
-                if (button.dataset.priceType === "monthly") {
-                    button.textContent = '✨ Upgrade to Pro ($10/month)';
-                } else {
-                    button.textContent = '✨ Upgrade to Pro ($99 Lifetime)'; 
-                }
+                button.textContent = 'Upgrade Failed. Try Again.';
                 button.disabled = false;
             }
         }

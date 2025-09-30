@@ -144,13 +144,6 @@ class SqlTableCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     script: str
 
-class SubscriptionStatusResponse(BaseModel):
-    plan_id: str
-    status: str # e.g., 'active', 'free'
-
-class SubscriptionDetailsResponse(BaseModel):
-    plan_id: str
-
 # --- FIX: Conditionally use EmailStr to prevent crash if 'email-validator' is not installed ---
 try:
     from pydantic import EmailStr
@@ -1381,145 +1374,138 @@ async def get_all_database_data(database_id: int, auth_details: dict = Depends(g
 
     return all_data
 
-@app.get("/api/v1/subscription-details", response_model=SubscriptionDetailsResponse)
+@app.get("/api/v1/create-checkout")
+async def create_checkout(variantId: str, auth_details: dict = Depends(get_current_user_details)):
+    """
+    Creates a Lemon Squeezy checkout session for the current user.
+    """
+    user = auth_details["user"]
+    if not all([LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID]):
+        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
+
+    headers = {
+        'Accept': 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
+    }
+    payload = {
+        "data": {
+            "type": "checkouts",
+            "attributes": {
+                "checkout_data": {
+                    "email": user.email,
+                    "custom": {
+                        "user_id": str(user.id)
+                    }
+                }
+            },
+            "relationships": {
+                "store": {
+                    "data": {
+                        "type": "stores",
+                        "id": str(LEMON_SQUEEZY_STORE_ID)
+                    }
+                },
+                "variant": {
+                    "data": {
+                        "type": "variants",
+                        "id": str(variantId)
+                    }
+                }
+            }
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post('https://api.lemonsqueezy.com/v1/checkouts', headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            checkout_url = data.get('data', {}).get('attributes', {}).get('url')
+            if not checkout_url:
+                raise HTTPException(status_code=500, detail="Could not retrieve checkout URL from Lemon Squeezy.")
+            return {"checkout_url": checkout_url}
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=e.response.status_code, detail=f"Error from billing provider: {e.response.text}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+@app.get("/api/v1/create-checkout")
+async def create_checkout(variantId: str, auth_details: dict = Depends(get_current_user_details)):
+    """
+    Creates a Lemon Squeezy checkout session for the current user.
+    """
+    user = auth_details["user"]
+    if not all([LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID]):
+        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
+
+    headers = {
+        'Accept': 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
+    }
+    payload = {
+        "data": {
+            "type": "checkouts",
+            "attributes": {
+                "checkout_data": {
+                    "email": user.email,
+                    "custom": {
+                        "user_id": str(user.id)
+                    }
+                }
+            },
+            "relationships": {
+                "store": {
+                    "data": {
+                        "type": "stores",
+                        "id": str(LEMON_SQUEEZY_STORE_ID)
+                    }
+                },
+                "variant": {
+                    "data": {
+                        "type": "variants",
+                        "id": str(variantId)
+                    }
+                }
+            }
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post('https://api.lemonsqueezy.com/v1/checkouts', headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            checkout_url = data.get('data', {}).get('attributes', {}).get('url')
+            if not checkout_url:
+                raise HTTPException(status_code=500, detail="Could not retrieve checkout URL from Lemon Squeezy.")
+            return {"checkout_url": checkout_url}
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=e.response.status_code, detail=f"Error from billing provider: {e.response.text}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+@app.get("/api/v1/subscription-details")
 async def get_subscription_details(auth_details: dict = Depends(get_current_user_details)):
     """
-    Fetches the subscription plan for the current user.
-    If no subscription record is found, it defaults to the 'free' plan.
+    Gets the current user's subscription status.
     """
     supabase = auth_details["client"]
     user = auth_details["user"]
+
     try:
-        # RLS on the user_subscriptions table should ensure we only get the user's own subscription.
-        response = supabase.table("user_subscriptions").select("plan_id, status").eq("user_id", user.id).maybe_single().execute()
+        # Check if the user has an active 'pro' subscription
+        response = supabase.table('user_subscriptions').select('plan_id').eq('user_id', user.id).eq('status', 'active').maybe_single().execute()
 
-        # --- FIX: Correctly handle the response to always return the SubscriptionDetailsResponse model ---
-        # If a subscription record exists and is active, return its plan_id.
-        if response and response.data and response.data.get("status") == "active":
-            # The response.data is a dictionary. We need to construct the Pydantic model from it.
-            plan_id = response.data.get("plan_id", "free")
-            return SubscriptionDetailsResponse(plan_id=plan_id)
+        if response.data and response.data.get('plan_id') == 'pro':
+            return {"plan_id": "pro"}
         else:
-            # If no subscription record exists (e.g., for a new user),
-            # gracefully return the 'free' plan by default.
-            return SubscriptionDetailsResponse(plan_id='free')
-
+            # If no active subscription is found, they are on the free plan
+            return {"plan_id": "free"}
     except APIError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"API Error: {e.message}")
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error checking subscription: {e.message}")
 
-@app.get("/api/v1/create-checkout")
-async def create_checkout(variantId: str, auth_details: dict = Depends(get_current_user_details)):
-    """
-    Creates a Lemon Squeezy checkout session for the current user.
-    """
-    user = auth_details["user"]
-    if not all([LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID]):
-        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
-
-    headers = {
-        'Accept': 'application/vnd.api+json',
-        'Content-Type': 'application/vnd.api+json',
-        'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
-    }
-    payload = {
-        "data": {
-            "type": "checkouts",
-            "attributes": {
-                "checkout_data": {
-                    "email": user.email,
-                    "custom": {
-                        "user_id": str(user.id)
-                    }
-                }
-            },
-            "relationships": {
-                "store": {
-                    "data": {
-                        "type": "stores",
-                        "id": str(LEMON_SQUEEZY_STORE_ID)
-                    }
-                },
-                "variant": {
-                    "data": {
-                        "type": "variants",
-                        "id": str(variantId)
-                    }
-                }
-            }
-        }
-    }
-
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post('https://api.lemonsqueezy.com/v1/checkouts', headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            checkout_url = data.get('data', {}).get('attributes', {}).get('url')
-            if not checkout_url:
-                raise HTTPException(status_code=500, detail="Could not retrieve checkout URL from Lemon Squeezy.")
-            return {"checkout_url": checkout_url}
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=f"Error from billing provider: {e.response.text}")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
-
-@app.get("/api/v1/create-checkout")
-async def create_checkout(variantId: str, auth_details: dict = Depends(get_current_user_details)):
-    """
-    Creates a Lemon Squeezy checkout session for the current user.
-    """
-    user = auth_details["user"]
-    if not all([LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID]):
-        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
-
-    headers = {
-        'Accept': 'application/vnd.api+json',
-        'Content-Type': 'application/vnd.api+json',
-        'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
-    }
-    payload = {
-        "data": {
-            "type": "checkouts",
-            "attributes": {
-                "checkout_data": {
-                    "email": user.email,
-                    "custom": {
-                        "user_id": str(user.id)
-                    }
-                }
-            },
-            "relationships": {
-                "store": {
-                    "data": {
-                        "type": "stores",
-                        "id": str(LEMON_SQUEEZY_STORE_ID)
-                    }
-                },
-                "variant": {
-                    "data": {
-                        "type": "variants",
-                        "id": str(variantId)
-                    }
-                }
-            }
-        }
-    }
-
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post('https://api.lemonsqueezy.com/v1/checkouts', headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            checkout_url = data.get('data', {}).get('attributes', {}).get('url')
-            if not checkout_url:
-                raise HTTPException(status_code=500, detail="Could not retrieve checkout URL from Lemon Squeezy.")
-            return {"checkout_url": checkout_url}
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=f"Error from billing provider: {e.response.text}")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 @app.post("/api/v1/lemonsqueezy-webhook")
 async def lemonsqueezy_webhook(request: Request):
