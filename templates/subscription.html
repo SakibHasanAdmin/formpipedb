@@ -117,7 +117,7 @@
 
             // Enable checkout buttons only if the variant IDs are configured from the backend
             checkoutBtns.forEach(btn => {
-                if (btn.dataset.variantId) {
+                if (btn.dataset.variantId && btn.dataset.variantId.length > 0) {
                     btn.disabled = false;
                 }
             });
