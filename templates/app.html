@@ -423,6 +423,15 @@
                 profileDropdown.classList.toggle('hidden');
             });
 
+            // --- FIX: Close profile dropdown when clicking outside ---
+            document.addEventListener('click', (event) => {
+                const isClickInsideButton = profileBtn.contains(event.target);
+                const isClickInsideDropdown = profileDropdown.contains(event.target);
+
+                if (!isClickInsideButton && !isClickInsideDropdown && !profileDropdown.classList.contains('hidden')) {
+                    profileDropdown.classList.add('hidden');
+                }
+            });
 
             signOutBtn.addEventListener('click', async () => {
                 await supabase.auth.signOut(); // This clears the session from storage

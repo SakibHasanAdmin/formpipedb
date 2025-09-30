@@ -317,6 +317,8 @@ async def create_database_table(database_id: int, table_data: TableCreate, auth_
     except APIError as e:
         _handle_api_error(e)
 
+
+
 @app.post("/api/v1/databases/by-name/{db_name}/tables", response_model=TableResponse, status_code=status.HTTP_201_CREATED)
 async def create_table_by_db_name(db_name: str, table_data: TableCreate, auth_details: dict = Depends(get_current_user_details)):
     """
@@ -1473,6 +1475,19 @@ async def app_page(request: Request):
     return templates.TemplateResponse(
         "app.html", 
         {"request": request, "supabase_url": SUPABASE_URL, "supabase_anon_key": SUPABASE_ANON_KEY}
+    )
+
+
+@app.get("/subscription", response_class=HTMLResponse)
+async def subscription_page(request: Request):
+    """Renders the subscription management page."""
+    return templates.TemplateResponse(
+        "subscription.html",
+        {
+            "request": request,
+            "supabase_url": SUPABASE_URL,
+            "supabase_anon_key": SUPABASE_ANON_KEY,
+        },
     )
 
 @app.get("/app/database/{db_name}", response_class=HTMLResponse)
