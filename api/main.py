@@ -1637,6 +1637,8 @@ async def subscription_page(request: Request):
             "request": request,
             "supabase_url": SUPABASE_URL,
             "supabase_anon_key": SUPABASE_ANON_KEY,
+            "pro_monthly_variant_id": LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID,
+            "pro_lifetime_variant_id": LEMON_SQUEEZY_PRO_LIFETIME_VARIANT_ID,
         },
     )
 
