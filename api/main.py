@@ -1584,18 +1584,16 @@ async def app_page(request: Request):
 
 
 @app.get("/subscription", response_class=HTMLResponse)
-async def subscription_page(request: Request, auth_details: dict = Depends(get_current_user_details)):
+async def subscription_page(request: Request):
     """Renders the subscription management page."""
-    user = auth_details["user"]
-    # Get the user's current plan from their metadata, default to 'free' if not set
-    current_plan = user.user_metadata.get("plan", "free")
+    # The page will now fetch the user's plan via client-side JavaScript
+    # after authenticating with Supabase.
     return templates.TemplateResponse(
         "subscription.html",
         {
             "request": request,
             "supabase_url": SUPABASE_URL,
             "supabase_anon_key": SUPABASE_ANON_KEY,
-            "current_plan": current_plan,
         },
     )
 

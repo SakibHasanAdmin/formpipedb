@@ -209,7 +209,7 @@
                     if (session) {
                         const user = session.user;
                         const userMetadata = user.user_metadata || {};
-                        const fullName = userMetadata.full_name;
+                        const fullName = userMetadata.full_name || user.email;
                         const plan = userMetadata.plan || 'Free';
 
                         // Populate profile dropdown
