@@ -198,11 +198,11 @@
                     banner.classList.remove('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200', 'bg-green-100', 'text-green-800', 'hover:bg-green-200');
  
                     if (data.plan_id === 'pro') {
-                        banner.textContent = '🚀 Pro Plan';
+                        banner.textContent = 'Pro';
                         // Add classes for the "Pro" plan style
                         banner.classList.add('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200');
                     } else { // Free or any other status
-                        banner.textContent = '✨ Upgrade to Pro'; 
+                        banner.textContent = 'Free'; 
                         // Add classes for the "Free" plan style
                         banner.classList.add('bg-green-100', 'text-green-800', 'hover:bg-green-200');
                     }
@@ -472,7 +472,7 @@
 
                         // Fetch data if it hasn't been loaded yet. This handles token refresh on initial load.
                         if (!initialDataLoaded) {
-                            fetchSubscriptionStatus();
+                            fetchSubscriptionStatus(); // This was missing
                             fetchDatabases();
                         }
                     } else {
