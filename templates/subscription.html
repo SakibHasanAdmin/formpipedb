@@ -49,27 +49,28 @@
         <div id="pro-user-state" class="hidden text-center bg-white p-8 rounded-lg shadow-md border max-w-2xl mx-auto">
             <h1 class="text-3xl font-bold text-gray-800 mb-4">You are on the Pro Plan!</h1>
             <p class="text-gray-600 mb-6">Thank you for your support. You have access to all Pro features.</p>
-            <div class="flex justify-center gap-4 mt-8">
+            <div class="flex flex-col sm:flex-row justify-center gap-4 mt-8">
                 <a href="/app" class="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 font-semibold">Go to Dashboard</a>
-                <!-- --- FIX: Add a button to manage subscription --- -->
                 <button id="manage-subscription-btn" class="bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 font-semibold">Manage Subscription</button>
             </div>
         </div>
 
         <!-- Free User State -->
         <div id="free-user-state" class="hidden">
-            <h1 class="text-3xl font-bold text-center text-gray-800 mb-2">Upgrade to Pro</h1>
-            <p class="text-center text-gray-600 mb-10">Unlock powerful features and support the project.</p>
+            <h1 class="text-3xl font-bold text-center text-gray-800 mb-2">You are on the Free Plan</h1>
+            <p class="text-center text-gray-600 mb-10">Upgrade to unlock powerful features and support the project.</p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
                 <!-- Monthly Plan -->
                 <div class="bg-white p-8 rounded-lg shadow-md border flex flex-col">
                     <h2 class="text-2xl font-semibold mb-2">Pro Monthly</h2>
-                    <p class="text-4xl font-bold mb-4">$19<span class="text-lg font-medium text-gray-500">/month</span></p>
+                    <p class="text-4xl font-bold mb-4">$9<span class="text-lg font-medium text-gray-500">/month</span></p>
                     <ul class="space-y-2 text-gray-600 mb-8 flex-grow">
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited Databases</li>
-                        <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited Tables & Rows</li>
+                        <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited Tables</li>
+                        <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>100,000 Rows per Table</li>
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>SQL Import/Export</li>
+                        <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>No-Code Query Builder</li>
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Priority Support</li>
                     </ul>
                     <button data-variant-id="1017372" class="checkout-btn w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 font-semibold">Get Started</button>
@@ -79,13 +80,13 @@
                 <div class="bg-white p-8 rounded-lg shadow-md border-2 border-indigo-500 flex flex-col relative">
                     <span class="absolute top-0 -translate-y-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">BEST VALUE</span>
                     <h2 class="text-2xl font-semibold mb-2">Pro Lifetime</h2>
-                    <p class="text-4xl font-bold mb-4">$199<span class="text-lg font-medium text-gray-500"> one-time</span></p>
+                    <p class="text-4xl font-bold mb-4">$99<span class="text-lg font-medium text-gray-500"> one-time</span></p>
                     <ul class="space-y-2 text-gray-600 mb-8 flex-grow">
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>All Pro features, forever</li>
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Pay once, use forever</li>
                         <li class="flex items-center"><svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>All future updates included</li>
                     </ul>
-                    <button data-variant-id="1017383" class="checkout-btn w-full bg-indigo-600 text-white py-3 rounded-md hover:bg-indigo-700 font-semibold">Go Lifetime</button>
+                    <button data-variant-id="1017383" class="checkout-btn w-full bg-indigo-600 text-white py-3 rounded-md hover:bg-indigo-700 font-semibold">Get Lifetime Deal</button>
                 </div>
             </div>
         </div>
@@ -171,11 +172,11 @@
 
                     if (!response.ok) {
                         const err = await response.json();
-                        throw new Error(err.detail || 'Failed to create customer portal session.');
+                        throw new Error(err.detail || 'Failed to get customer portal URL.');
                     }
 
-                    const { portal_url } = await response.json();
-                    window.location.href = portal_url;
+                    const { checkout_url: portalUrl } = await response.json();
+                    window.location.href = portalUrl;
 
                 } catch (error) {
                     alert(`Error: ${error.message}`);
