@@ -1500,17 +1500,25 @@ async def lemonsqueezy_webhook(request: Request):
     try:
         data = json.loads(raw_body)
         event_name = data.get("meta", {}).get("event_name")
-        
-        # We care about successful purchases for both one-time and recurring plans
-        if event_name in ["order_created", "subscription_created"]:
+        user_id = None
+
+        # --- FIX: Extract user_id from the correct location based on the event ---
+        if event_name in ["order_created"]:
             user_id = data.get("meta", {}).get("custom_data", {}).get("user_id")
-            if user_id:
-                # Create Supabase admin client to update user metadata
-                supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-                
-                # Update user's plan in their metadata
-                await asyncio.to_thread(supabase_admin.auth.admin.update_user_by_id, user_id, {'user_metadata': {'plan': 'pro'}})
-                print(f"Successfully upgraded user {user_id} to Pro plan.")
+        elif event_name in ["subscription_created", "subscription_payment_success"]:
+            user_id = data.get("data", {}).get("attributes", {}).get("custom_data", {}).get("user_id")
+
+        if user_id:
+            # Create Supabase admin client to update user metadata
+            supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+            
+            # Update user's plan in their metadata to 'pro'
+            await asyncio.to_thread(
+                supabase_admin.auth.admin.update_user_by_id,
+                user_id,
+                {'user_metadata': {'plan': 'pro'}}
+            )
+            print(f"Successfully upgraded user {user_id} to Pro plan via event: {event_name}")
 
         return Response(status_code=200)
     except Exception as e:
