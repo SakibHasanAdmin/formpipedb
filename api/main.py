@@ -1406,12 +1406,14 @@ async def create_checkout_url(checkout_request: CheckoutRequest, auth_details: d
             "attributes": {
                 "checkout_data": {
                     "email": user.email,
+                    # This custom data is passed through to the order and subscription objects.
+                    # This is the key to linking the payment back to the Supabase user.
                     "custom": {
                         "user_id": user.id,
                     },
                 },
                 "product_options": {
-                    "redirect_url": f"{SITE_URL}/app",
+                    "redirect_url": f"{SITE_URL}/subscription?upgraded=true",
                 }
             },
             "relationships": {
@@ -1502,11 +1504,10 @@ async def lemonsqueezy_webhook(request: Request):
         event_name = data.get("meta", {}).get("event_name")
         user_id = None
 
-        # --- FIX: Extract user_id from the correct location based on the event ---
-        if event_name in ["order_created"]:
-            user_id = data.get("meta", {}).get("custom_data", {}).get("user_id")
-        elif event_name in ["subscription_created", "subscription_payment_success"]:
-            user_id = data.get("data", {}).get("attributes", {}).get("custom_data", {}).get("user_id")
+        # --- FIX: Extract user_id from the correct location ---
+        # The user_id is consistently in `custom_data` for all relevant events
+        # if it was set correctly during checkout creation.
+        user_id = data.get("meta", {}).get("custom_data", {}).get("user_id")
 
         if user_id:
             # Create Supabase admin client to update user metadata
