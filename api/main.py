@@ -1082,9 +1082,8 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
         create_statement = f"CREATE TABLE \"{table.name}\" (\n"
         column_defs = []
         for col in table.columns:
-            # --- FIX: Add SERIAL for auto-incrementing integer primary keys ---
-            # This makes the CREATE TABLE statement correctly define auto-generating keys.
-            if col.is_primary_key and col.type.upper() == 'INTEGER':
+            # Correctly use SERIAL for columns marked as auto-incrementing primary keys.
+            if col.is_primary_key and col.is_auto_increment and 'INT' in col.type.upper():
                 col_def = f"  \"{col.name}\" SERIAL PRIMARY KEY"
             else:
                 col_def = f"  \"{col.name}\" {col.type.upper()}"
@@ -1100,9 +1099,8 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
         create_statement += "\n);\n\n"
         sql_script += create_statement
 
-        # --- FIX: Fetch raw rows directly to avoid incorrect PK injection from get_all_table_rows ---
-        # RLS on table_rows ensures user can only access rows they own.
-        raw_rows_res = supabase.table("table_rows").select("data").eq("table_id", table.id).order("id").execute()
+        # Fetch all rows for the table to include their data.
+        raw_rows_res = supabase.table("table_rows").select("id, data").eq("table_id", table.id).order("id").execute()
 
         if raw_rows_res.data:
             sql_script += f"-- Data for table: {table.name}\n"
@@ -1111,17 +1109,10 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
                 if not row_data:
                     continue
 
-                pk_col = next((col for col in table.columns if col.is_primary_key), None)
-                pk_is_auto_increment = pk_col.is_auto_increment if pk_col else False
-                
-                columns_to_insert = [f'"{k}"' for k, v in row_data.items() if not (pk_is_auto_increment and k == pk_col.name)]
+                columns_to_insert = [f'"{k}"' for k in row_data.keys()]
                 values_to_insert = []
-                for k, v in row_data.items():
-                    if pk_is_auto_increment and k == pk_col.name:
-                        continue
-
+                for v in row_data.values():
                     if isinstance(v, str):
-                        # The value from JSONB is already a clean string. We just need to escape it for SQL.
                         escaped_v = v.replace("'", "''")
                         values_to_insert.append(f"'{escaped_v}'")
                     elif v is None:
