@@ -1512,14 +1512,24 @@ async def lemonsqueezy_webhook(request: Request):
         if user_id:
             # Create Supabase admin client to update user metadata
             supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-            
-            # Update user's plan in their metadata to 'pro'
-            await asyncio.to_thread(
-                supabase_admin.auth.admin.update_user_by_id,
-                user_id,
-                {'user_metadata': {'plan': 'pro'}}
-            )
-            print(f"Successfully upgraded user {user_id} to Pro plan via event: {event_name}")
+
+            # --- FIX: Update the user_subscriptions table instead of user_metadata ---
+            # This ensures the subscription status is stored where the application expects it.
+            # We use 'upsert' to either create a new subscription record or update an existing one.
+            try:
+                subscription_data = {
+                    "user_id": user_id,
+                    "plan_id": "pro", # Set the plan to 'pro'
+                    "status": "active", # Set the status to 'active'
+                    "updated_at": datetime.utcnow().isoformat()
+                }
+                # Upsert on the user_id column.
+                supabase_admin.table("user_subscriptions").upsert(subscription_data, on_conflict="user_id").execute()
+                print(f"Successfully upgraded user {user_id} to Pro plan in user_subscriptions table via event: {event_name}")
+            except APIError as e:
+                print(f"Error updating user_subscriptions for user {user_id}: {e.message}")
+                # Still return 200 to prevent webhook retries, but log the error.
+                return Response(status_code=200, content=f"Webhook processed with DB error: {str(e)}")
 
         return Response(status_code=200)
     except Exception as e:
