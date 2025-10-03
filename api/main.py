@@ -1541,8 +1541,7 @@ async def lemonsqueezy_webhook(request: Request):
             # Create Supabase admin client to update user metadata
             supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-            # --- FIX: Upsert into the user_subscriptions table ---
-            # This correctly updates the table the application uses to check for "Pro" status.
+            # --- Upsert into the user_subscriptions table ---
             try:
                 subscription_data = {
                     "user_id": user_id,
@@ -1550,18 +1549,23 @@ async def lemonsqueezy_webhook(request: Request):
                     "status": "active",
                     "updated_at": datetime.utcnow().isoformat()
                 }
-                
-                # Use upsert to either create a new subscription record or update an existing one.
-                # The on_conflict="user_id" tells Supabase to update the row if a record for that user_id already exists.
                 await asyncio.to_thread(
                     partial(supabase_admin.table("user_subscriptions").upsert, subscription_data, on_conflict="user_id")
                 )
-                
                 print(f"Successfully upserted subscription for user {user_id} to Pro plan via event: {event_name}")
             except APIError as e:
                 print(f"Error updating user_subscriptions for user {user_id}: {e.message}")
-                # Still return 200 to prevent webhook retries, but log the error.
                 return Response(status_code=500, content=f"Webhook processed with DB error: {str(e)}")
+
+            # --- Update user_metadata.plan to 'pro' ---
+            try:
+                # Use Supabase Admin API to update user_metadata
+                await asyncio.to_thread(
+                    partial(supabase_admin.auth.admin.update_user_by_id, user_id, {"user_metadata": {"plan": "pro"}})
+                )
+                print(f"Successfully updated user_metadata.plan for user {user_id} to 'pro'")
+            except Exception as meta_err:
+                print(f"Failed to update user_metadata for {user_id}: {meta_err}")
 
         return Response(status_code=200)
     except Exception as e:
