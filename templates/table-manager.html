@@ -1261,9 +1261,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const columns = state.selectedTable.columns.map(c => c.name);
             const csvRows = [columns.join(',')];
-            rows.forEach(row => {
+            rows.forEach((row, rowIndex) => { // Added rowIndex for potential future use, though not strictly needed for this fix
                 const values = columns.map(colName => {
-                    const value = colName === 'id' ? row.id : (row.data ? (row.data[colName] ?? '') : ''); // Basic CSV escaping: wrap in quotes if it contains a comma or quote
+                    const value = row.data ? (row.data[colName] ?? '') : ''; // Always use row.data, as the API prepares the client-side ID there
                     const strValue = String(value);
                     if (strValue.includes(',') || strValue.includes('"')) {
                         return `"${strValue.replace(/"/g, '""')}"`;

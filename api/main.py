@@ -1082,8 +1082,13 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
         create_statement = f"CREATE TABLE \"{table.name}\" (\n"
         column_defs = []
         for col in table.columns:
-            col_def = f"  \"{col.name}\" {col.type.upper()}"
-            if col.is_primary_key: col_def += " PRIMARY KEY"
+            # --- FIX: Add SERIAL for auto-incrementing integer primary keys ---
+            # This makes the CREATE TABLE statement correctly define auto-generating keys.
+            if col.is_primary_key and col.type.upper() == 'INTEGER':
+                col_def = f"  \"{col.name}\" SERIAL PRIMARY KEY"
+            else:
+                col_def = f"  \"{col.name}\" {col.type.upper()}"
+                if col.is_primary_key: col_def += " PRIMARY KEY"
             if col.is_not_null: col_def += " NOT NULL"
             if col.is_unique: col_def += " UNIQUE"
             if col.foreign_key:
