@@ -1300,17 +1300,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const rowId = rowElement.dataset.rowId || null; // null for new rows
 
         for (const col of columns) {
-            // --- FIX: Skip validation for auto-incrementing primary keys on new rows ---
-            if (!rowId && col.is_primary_key && col.is_auto_increment) {
-                continue; // Don't validate the PK on a new row
-            }
-            // --------------------------------------------------------------------
-
             const value = rowData[col.name];
 
             // 1. NOT NULL Check
             if (col.is_not_null && (value === null || value === '')) {
-                // This part is now redundant because of the fix above, but it's safe to keep.
                 if (col.is_primary_key && col.is_auto_increment && !rowId) {
                     continue;
                 }

@@ -1077,6 +1077,10 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
     sql_script = f"-- SQL Dump for database: {db_name}\n\n"
 
     for table in tables:
+        # --- FIX: Identify the auto-incrementing column to exclude it from INSERTs ---
+        auto_increment_col = next((col.name for col in table.columns if col.is_auto_increment), None)
+        # --------------------------------------------------------------------------
+
         # Generate CREATE TABLE statement
         sql_script += f"-- Structure for table: {table.name}\n"
         create_statement = f"CREATE TABLE \"{table.name}\" (\n"
@@ -1109,9 +1113,14 @@ async def export_database_as_sql(database_id: int, auth_details: dict = Depends(
                 if not row_data:
                     continue
 
-                columns_to_insert = [f'"{k}"' for k in row_data.keys()]
+                # --- FIX: Filter out the auto-incrementing column from the INSERT statement ---
+                columns_to_insert = [f'"{k}"' for k in row_data.keys() if k != auto_increment_col]
                 values_to_insert = []
-                for v in row_data.values():
+                for k, v in row_data.items():
+                    if k == auto_increment_col:
+                        continue # Skip the value for the auto-incrementing column
+                # --------------------------------------------------------------------------
+
                     if isinstance(v, str):
                         escaped_v = v.replace("'", "''")
                         values_to_insert.append(f"'{escaped_v}'")
