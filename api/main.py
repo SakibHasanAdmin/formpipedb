@@ -1402,8 +1402,11 @@ async def create_checkout_url(checkout_request: CheckoutRequest, auth_details: d
     user = auth_details["user"]
     variant_id = checkout_request.variant_id
 
-    if not LEMONSQUEEZY_API_KEY or not LEMONSQUEEZY_STORE_ID:
-        raise HTTPException(status_code=500, detail="Lemon Squeezy is not configured.")
+    # --- FIX: Add comprehensive checks for all required Lemon Squeezy environment variables ---
+    if not all([LEMONSQUEEZY_API_KEY, LEMONSQUEEZY_STORE_ID, SITE_URL]):
+        missing_vars = [var for var, val in [("LEMONSQUEEZY_API_KEY", LEMONSQUEEZY_API_KEY), ("LEMONSQUEEZY_STORE_ID", LEMONSQUEEZY_STORE_ID), ("SITE_URL", SITE_URL)] if not val]
+        error_detail = f"Payment provider is not configured correctly on the server. Missing: {', '.join(missing_vars)}"
+        raise HTTPException(status_code=503, detail=error_detail)
 
     client = lemonsqueezy.Client(api_key=LEMONSQUEEZY_API_KEY)
     
