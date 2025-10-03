@@ -1405,7 +1405,8 @@ async def create_checkout_url(checkout_request: CheckoutRequest, auth_details: d
     if not LEMONSQUEEZY_API_KEY or not LEMONSQUEEZY_STORE_ID:
         raise HTTPException(status_code=500, detail="Lemon Squeezy is not configured.")
 
-    client = lemonsqueezy.Client(LEMONSQUEEZY_API_KEY)
+    client = lemonsqueezy.Client(api_key=LEMONSQUEEZY_API_KEY)
+    
 
     try:
         # The `custom_data` is crucial for linking the purchase back to your Supabase user ID in the webhook.
@@ -1436,8 +1437,7 @@ async def create_customer_portal_url(auth_details: dict = Depends(get_current_us
     if not subscription_res.data:
         raise HTTPException(status_code=404, detail="No active subscription found.")
 
-    client = lemonsqueezy.Client(LEMONSQUEEZY_API_KEY)
-
+    client = lemonsqueezy.Client(api_key=LEMONSQUEEZY_API_KEY)
     try:
         sub_data = client.get_subscription(id=subscription_res.data["lemon_squeezy_id"])
         return {"portal_url": sub_data.body['data']['attributes']['urls']['customer_portal']}
