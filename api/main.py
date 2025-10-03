@@ -3,17 +3,12 @@
 
 import os
 import asyncio
-import hmac
-import hashlib
-import json
-from functools import partial
 from pathlib import Path
 import io, csv
 import re
 from fastapi import FastAPI, Request, Header, HTTPException, status, Depends, Query
 from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse, Response
 from fastapi.templating import Jinja2Templates
-import httpx
 from fastapi.staticfiles import StaticFiles
 from datetime import datetime
 from typing import List, Optional, Any, Dict
@@ -29,11 +24,6 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 HCAPTCHA_SITE_KEY = os.environ.get("HCAPTCHA_SITE_KEY")
 SITE_URL = os.environ.get("SITE_URL")
-LEMON_SQUEEZY_API_KEY = os.environ.get("LEMON_SQUEEZY_API_KEY")
-LEMON_SQUEEZY_STORE_ID = os.environ.get("LEMON_SQUEEZY_STORE_ID")
-LEMON_SQUEEZY_WEBHOOK_SECRET = os.environ.get("LEMON_SQUEEZY_WEBHOOK_SECRET")
-LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID = os.environ.get("LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID")
-LEMON_SQUEEZY_PRO_LIFETIME_VARIANT_ID = os.environ.get("LEMON_SQUEEZY_PRO_LIFETIME_VARIANT_ID")
 
 # Get the root directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -161,12 +151,6 @@ class ContactRequest(BaseModel):
 class AuthenticatedAccountDeletionRequest(BaseModel):
     confirmation: str = Field(..., pattern=r"^delete my account$", description="User must type 'delete my account' to confirm.")
 
-class CheckoutRequest(BaseModel):
-    variant_id: str
-
-class CheckoutResponse(BaseModel):
-    checkout_url: str
-
 
 
 # --- Reusable Dependencies ---
@@ -202,33 +186,6 @@ async def get_current_user_details(authorization: str = Header(None)) -> dict:
     except Exception as e:
         # This could be a PostgrestError or another exception
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Invalid token: {str(e)}")
-
-async def get_pro_user(auth_details: dict = Depends(get_current_user_details)):
-    """
-    Dependency that checks if the current user has an active 'pro' subscription.
-    Raises a 403 Forbidden error if they do not.
-    """
-    supabase = auth_details["client"]
-    user = auth_details["user"]
-    try:
-        # RLS on user_subscriptions ensures the user can only query their own record.
-        subscription_res = await asyncio.to_thread(
-            supabase.table("user_subscriptions")
-            .select("status, plan_id", count='exact')
-            .eq("user_id", user.id)
-            .eq("status", "active")
-            .eq("plan_id", "pro")
-            .execute
-        )
-        
-        if subscription_res.count == 0:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This feature requires a Pro plan. Please upgrade your account."
-            )
-        return auth_details
-    except APIError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error checking subscription: {e.message}")
 
 def _handle_api_error(e: APIError):
     """
@@ -1411,167 +1368,6 @@ async def get_all_database_data(database_id: int, auth_details: dict = Depends(g
 
     return all_data
 
-@app.post("/api/v1/subscription/checkout-url", response_model=CheckoutResponse)
-async def create_checkout_url(checkout_request: CheckoutRequest, auth_details: dict = Depends(get_current_user_details)):
-    """
-    Creates a Lemon Squeezy checkout URL for the authenticated user.
-    """
-    user = auth_details["user"]
-    if not LEMON_SQUEEZY_API_KEY or not LEMON_SQUEEZY_STORE_ID:
-        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
-
-    headers = {
-        "Accept": "application/vnd.api+json",
-        "Content-Type": "application/vnd.api+json",
-        "Authorization": f"Bearer {LEMON_SQUEEZY_API_KEY}",
-    }
-
-    # Pre-fill user data and add user_id to metadata for webhook processing and stuff
-    payload = {
-        "data": {
-            "type": "checkouts",
-            "attributes": {
-                "checkout_data": {
-                    "email": user.email,
-                    # This custom data is passed through to the order and subscription objects.
-                    # This is the key to linking the payment back to the Supabase user.
-                    "custom": {
-                        "user_id": user.id,
-                    },
-                },
-                "product_options": {
-                    "redirect_url": f"{SITE_URL}/subscription?upgraded=true",
-                }
-            },
-            "relationships": {
-                "store": {"data": {"type": "stores", "id": LEMON_SQUEEZY_STORE_ID}},
-                "variant": {"data": {"type": "variants", "id": checkout_request.variant_id}},
-            },
-        }
-    }
-
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post("https://api.lemonsqueezy.com/v1/checkouts", headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            checkout_url = data.get("data", {}).get("attributes", {}).get("url")
-            if not checkout_url:
-                raise HTTPException(status_code=500, detail="Could not retrieve checkout URL from Lemon Squeezy.")
-            return {"checkout_url": checkout_url}
-        except httpx.HTTPStatusError as e:
-            print(f"Lemon Squeezy API Error: {e.response.text}")
-            raise HTTPException(status_code=500, detail=f"Failed to create checkout session: {e.response.text}")
-        except Exception as e:
-            print(f"An unexpected error occurred: {str(e)}")
-            raise HTTPException(status_code=500, detail="An unexpected error occurred while creating the checkout session.")
-
-@app.post("/api/v1/subscription/customer-portal-url", response_model=CheckoutResponse)
-async def create_customer_portal_url(auth_details: dict = Depends(get_current_user_details)):
-    """
-    Retrieves the customer portal URL for the authenticated user from Lemon Squeezy.
-    """
-    user = auth_details["user"]
-    if not LEMON_SQUEEZY_API_KEY:
-        raise HTTPException(status_code=500, detail="Billing is not configured on the server.")
-
-    headers = {
-        "Accept": "application/vnd.api+json",
-        "Authorization": f"Bearer {LEMON_SQUEEZY_API_KEY}",
-    }
-
-    # 1. Find the user's subscription to get the customer portal URL
-    async with httpx.AsyncClient() as client:
-        try:
-            # Find the subscription associated with the user's email
-            # Note: This assumes one subscription per email. For more complex scenarios, you might need to store the subscription_id.
-            subs_response = await client.get(f"https://api.lemonsqueezy.com/v1/subscriptions?filter[user_email]={user.email}", headers=headers)
-            subs_response.raise_for_status()
-            subs_data = subs_response.json()
-
-            if not subs_data.get("data") or len(subs_data["data"]) == 0:
-                raise HTTPException(status_code=404, detail="No active subscription found for this user.")
-
-            # Get the customer portal URL from the first subscription found
-            portal_url = subs_data["data"][0].get("attributes", {}).get("urls", {}).get("customer_portal")
-            if not portal_url:
-                raise HTTPException(status_code=500, detail="Could not retrieve customer portal URL.")
-
-            return {"checkout_url": portal_url}
-        except httpx.HTTPStatusError as e:
-            print(f"Lemon Squeezy API Error (Customer Portal): {e.response.text}")
-            raise HTTPException(status_code=500, detail=f"Failed to create customer portal session: {e.response.text}")
-
-@app.post("/api/v1/lemonsqueezy/webhook")
-async def lemonsqueezy_webhook(request: Request):
-    """
-    Handles webhooks from Lemon Squeezy to update user subscription status.
-    """
-    if not LEMON_SQUEEZY_WEBHOOK_SECRET:
-        raise HTTPException(status_code=500, detail="Webhook secret not configured.")
-
-    # 1. Verify signature
-    try:
-        raw_body = await request.body()
-        signature = request.headers.get("X-Signature")
-        if not signature:
-            raise HTTPException(status_code=400, detail="Missing X-Signature header.")
-        
-        h = hmac.new(LEMON_SQUEEZY_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256)
-        digest = h.hexdigest()
-
-        if not hmac.compare_digest(digest, signature):
-            raise HTTPException(status_code=400, detail="Invalid signature.")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Webhook validation failed: {str(e)}")
-
-    # 2. Process event
-    try:
-        data = json.loads(raw_body)
-        event_name = data.get("meta", {}).get("event_name")
-        user_id = data.get("meta", {}).get("custom_data", {}).get("user_id") # Default location
-
-        # The location of custom_data can vary by event type.
-        # This logic is not in the provided file, but is good practice.
-        # For now, we'll stick to the logic in the file.
-        # if event_name in ["subscription_created", "subscription_payment_success"]:
-        #     user_id = data.get("data", {}).get("attributes", {}).get("custom_data", {}).get("user_id")
-
-        if user_id:
-            # Create Supabase admin client to update user metadata
-            supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
-            # --- Upsert into the user_subscriptions table ---
-            try:
-                subscription_data = {
-                    "user_id": user_id,
-                    "plan_id": "pro",
-                    "status": "active",
-                    "updated_at": datetime.utcnow().isoformat()
-                }
-                await asyncio.to_thread(
-                    partial(supabase_admin.table("user_subscriptions").upsert, subscription_data, on_conflict="user_id")
-                )
-                print(f"Successfully upserted subscription for user {user_id} to Pro plan via event: {event_name}")
-            except APIError as e:
-                print(f"Error updating user_subscriptions for user {user_id}: {e.message}")
-                return Response(status_code=500, content=f"Webhook processed with DB error: {str(e)}")
-
-            # --- Update user_metadata.plan to 'pro' ---
-            try:
-                # Use Supabase Admin API to update user_metadata
-                await asyncio.to_thread(
-                    partial(supabase_admin.auth.admin.update_user_by_id, user_id, {"user_metadata": {"plan": "pro"}})
-                )
-                print(f"Successfully updated user_metadata.plan for user {user_id} to 'pro'")
-            except Exception as meta_err:
-                print(f"Failed to update user_metadata for {user_id}: {meta_err}")
-
-        return Response(status_code=200)
-    except Exception as e:
-        print(f"Error processing webhook: {str(e)}")
-        # Return 200 to prevent Lemon Squeezy from retrying on processing errors
-        return Response(status_code=500, content=f"Webhook processing error: {str(e)}")
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
 async def robots_txt():
@@ -1647,8 +1443,6 @@ async def confirm_delete_page(request: Request):
             "request": request,
             "supabase_url": SUPABASE_URL,
             "supabase_anon_key": SUPABASE_ANON_KEY,
-            "pro_monthly_variant_id": LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID,
-            "pro_lifetime_variant_id": LEMON_SQUEEZY_PRO_LIFETIME_VARIANT_ID,
         },
     )
 
@@ -1674,23 +1468,6 @@ async def app_page(request: Request):
     return templates.TemplateResponse(
         "app.html", 
         {"request": request, "supabase_url": SUPABASE_URL, "supabase_anon_key": SUPABASE_ANON_KEY}
-    )
-
-
-@app.get("/subscription", response_class=HTMLResponse)
-async def subscription_page(request: Request):
-    """Renders the subscription management page."""
-    # The page will now fetch the user's plan via client-side JavaScript
-    # after authenticating with Supabase.
-    return templates.TemplateResponse(
-        "subscription.html",
-        {
-            "request": request,
-            "supabase_url": SUPABASE_URL,
-            "supabase_anon_key": SUPABASE_ANON_KEY,
-            "pro_monthly_variant_id": LEMON_SQUEEZY_PRO_MONTHLY_VARIANT_ID,
-            "pro_lifetime_variant_id": LEMON_SQUEEZY_PRO_LIFETIME_VARIANT_ID,
-        },
     )
 
 @app.get("/app/database/{db_name}", response_class=HTMLResponse)
