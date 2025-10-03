@@ -155,13 +155,16 @@
                     });
 
                     if (!response.ok) {
-                        // --- FIX: Handle non-JSON error responses ---
-                        let errorDetail = 'Failed to create checkout session.';
+                        // --- FIX: Read body only once to avoid "body stream already read" error ---
+                        const errorText = await response.text();
+                        let errorDetail;
                         try {
-                            const err = await response.json();
-                            errorDetail = err.detail || errorDetail;
+                            // Try to parse the text as JSON
+                            const err = JSON.parse(errorText);
+                            errorDetail = err.detail || errorText; // Use detail message if available, otherwise the full text
                         } catch (jsonError) {
-                            errorDetail = await response.text(); // Fallback to raw text if not JSON
+                            // If it's not JSON, the error is the raw text itself (e.g., "Internal Server Error")
+                            errorDetail = errorText;
                         }
                         throw new Error(errorDetail);
                     }
