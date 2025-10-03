@@ -2,7 +2,11 @@
 # Forcing a Vercel resync on 2025-09-08 at 11:03 PM
 
 import os
+import hmac
+import hashlib
+import json
 import asyncio
+import lemonsqueezy
 from pathlib import Path
 import io, csv
 import re
@@ -24,6 +28,11 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 HCAPTCHA_SITE_KEY = os.environ.get("HCAPTCHA_SITE_KEY")
 SITE_URL = os.environ.get("SITE_URL")
+LEMONSQUEEZY_API_KEY = os.environ.get("LEMONSQUEEZY_API_KEY")
+LEMONSQUEEZY_STORE_ID = os.environ.get("LEMONSQUEEZY_STORE_ID")
+LEMONSQUEEZY_WEBHOOK_SECRET = os.environ.get("LEMONSQUEEZY_WEBHOOK_SECRET")
+PRO_MONTHLY_VARIANT_ID = os.environ.get("PRO_MONTHLY_VARIANT_ID")
+PRO_LIFETIME_VARIANT_ID = os.environ.get("PRO_LIFETIME_VARIANT_ID")
 
 # Get the root directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -110,6 +119,9 @@ class CsvRowImportResponse(BaseModel):
 
 # After all models are defined, resolve the forward reference in DatabaseResponse
 DatabaseResponse.model_rebuild()
+
+class CheckoutRequest(BaseModel):
+    variant_id: str
 
 class RowResponse(BaseModel):
     id: int
@@ -1381,6 +1393,108 @@ async def sitemap_xml():
     """Serves the sitemap.xml file from the public directory."""
     return FileResponse(path=BASE_DIR / "public" / "sitemap.xml", media_type="application/xml")
 
+
+@app.post("/api/v1/subscription/checkout-url")
+async def create_checkout_url(checkout_request: CheckoutRequest, auth_details: dict = Depends(get_current_user_details)):
+    """
+    Creates a Lemon Squeezy checkout URL for the user to purchase a subscription.
+    """
+    user = auth_details["user"]
+    variant_id = checkout_request.variant_id
+
+    if not LEMONSQUEEZY_API_KEY or not LEMONSQUEEZY_STORE_ID:
+        raise HTTPException(status_code=500, detail="Lemon Squeezy is not configured.")
+
+    client = lemonsqueezy.Client(LEMONSQUEEZY_API_KEY)
+
+    try:
+        # The `custom_data` is crucial for linking the purchase back to your Supabase user ID in the webhook.
+        checkout = client.create_checkout(
+            store_id=LEMONSQUEEZY_STORE_ID,
+            variant_id=variant_id,
+            checkout_data={
+                "email": user.email,
+                "custom": {"user_id": str(user.id)},
+            },
+            product_options={"redirect_url": f"{SITE_URL}/subscription"}
+        )
+        return {"checkout_url": checkout.body['data']['attributes']['url']}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create checkout: {e}")
+
+
+@app.post("/api/v1/subscription/customer-portal-url")
+async def create_customer_portal_url(auth_details: dict = Depends(get_current_user_details)):
+    """
+    Creates a URL for the user to manage their subscription (e.g., cancel, update payment).
+    """
+    user = auth_details["user"]
+    supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+    subscription_res = supabase_admin.table("subscriptions").select("lemon_squeezy_id").eq("user_id", user.id).single().execute()
+
+    if not subscription_res.data:
+        raise HTTPException(status_code=404, detail="No active subscription found.")
+
+    client = lemonsqueezy.Client(LEMONSQUEEZY_API_KEY)
+
+    try:
+        sub_data = client.get_subscription(id=subscription_res.data["lemon_squeezy_id"])
+        return {"portal_url": sub_data.body['data']['attributes']['urls']['customer_portal']}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get customer portal URL: {e}")
+
+
+@app.post("/api/v1/subscription/webhook")
+async def lemon_squeezy_webhook(request: Request):
+    """
+    Handles incoming webhooks from Lemon Squeezy to update subscription statuses.
+    This is how your app knows a payment was successful.
+    """
+    raw_body = await request.body()
+    signature = request.headers.get("X-Signature")
+
+    if not LEMONSQUEEZY_WEBHOOK_SECRET:
+         raise HTTPException(status_code=500, detail="Webhook secret is not configured.")
+    if not signature:
+        raise HTTPException(status_code=400, detail="Missing X-Signature header")
+
+    # Verify the signature to ensure the request is from Lemon Squeezy
+    h = hmac.new(LEMONSQUEEZY_WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256)
+    digest = h.hexdigest()
+
+    if not hmac.compare_digest(digest, signature):
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    data = json.loads(raw_body)
+    event_name = data.get("meta", {}).get("event_name")
+    custom_data = data.get("meta", {}).get("custom_data", {})
+    user_id = custom_data.get("user_id")
+
+    if not user_id:
+        # Not a checkout webhook that we need to process
+        return {"status": "ok", "message": "No user_id in custom_data, skipping."}
+
+    supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+    if event_name in ["subscription_created", "subscription_updated"]:
+        sub_data = data.get("data", {}).get("attributes", {})
+
+        # Use upsert to create or update the subscription record
+        supabase_admin.table("subscriptions").upsert({
+            "user_id": user_id,
+            "lemon_squeezy_id": data.get("data", {}).get("id"),
+            "status": sub_data.get("status"),
+            "variant_id": str(sub_data.get("variant_id")),
+            "ends_at": sub_data.get("ends_at"),
+        }, on_conflict="user_id").execute()
+
+        # Most importantly, update the user's metadata to grant them "Pro" access
+        plan = "Pro" if sub_data.get("status") in ["active", "on_trial"] else "Free"
+        supabase_admin.auth.admin.update_user_by_id(user_id, {"user_metadata": {"plan": plan}})
+
+    return {"status": "received"}
+
 # --- HTML Serving Endpoints ---
 
 @app.get("/", response_class=HTMLResponse)
@@ -1392,6 +1506,19 @@ async def read_root(request: Request):
             "supabase_url": SUPABASE_URL, 
             "supabase_anon_key": SUPABASE_ANON_KEY
         })
+
+@app.get("/subscription", response_class=HTMLResponse)
+async def subscription_page(request: Request):
+    return templates.TemplateResponse(
+        "subscription.html",
+        {
+            "request": request,
+            "supabase_url": SUPABASE_URL,
+            "supabase_anon_key": SUPABASE_ANON_KEY,
+            "pro_monthly_variant_id": PRO_MONTHLY_VARIANT_ID,
+            "pro_lifetime_variant_id": PRO_LIFETIME_VARIANT_ID,
+        },
+    )
 
 @app.get("/signup", response_class=HTMLResponse)
 async def signup_page(request: Request):
