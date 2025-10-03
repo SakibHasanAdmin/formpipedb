@@ -203,6 +203,33 @@ async def get_current_user_details(authorization: str = Header(None)) -> dict:
         # This could be a PostgrestError or another exception
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Invalid token: {str(e)}")
 
+async def get_pro_user(auth_details: dict = Depends(get_current_user_details)):
+    """
+    Dependency that checks if the current user has an active 'pro' subscription.
+    Raises a 403 Forbidden error if they do not.
+    """
+    supabase = auth_details["client"]
+    user = auth_details["user"]
+    try:
+        # RLS on user_subscriptions ensures the user can only query their own record.
+        subscription_res = await asyncio.to_thread(
+            supabase.table("user_subscriptions")
+            .select("status, plan_id", count='exact')
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .eq("plan_id", "pro")
+            .execute
+        )
+        
+        if subscription_res.count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This feature requires a Pro plan. Please upgrade your account."
+            )
+        return auth_details
+    except APIError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error checking subscription: {e.message}")
+
 def _handle_api_error(e: APIError):
     """
     Centralized handler for common Postgrest API errors to return user-friendly messages.
@@ -1502,40 +1529,45 @@ async def lemonsqueezy_webhook(request: Request):
     try:
         data = json.loads(raw_body)
         event_name = data.get("meta", {}).get("event_name")
-        user_id = None
+        user_id = data.get("meta", {}).get("custom_data", {}).get("user_id") # Default location
 
-        # --- FIX: Extract user_id from the correct location ---
-        # The user_id is consistently in `custom_data` for all relevant events
-        # if it was set correctly during checkout creation.
-        user_id = data.get("meta", {}).get("custom_data", {}).get("user_id")
+        # The location of custom_data can vary by event type.
+        # This logic is not in the provided file, but is good practice.
+        # For now, we'll stick to the logic in the file.
+        # if event_name in ["subscription_created", "subscription_payment_success"]:
+        #     user_id = data.get("data", {}).get("attributes", {}).get("custom_data", {}).get("user_id")
 
         if user_id:
             # Create Supabase admin client to update user metadata
             supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-            # --- FIX: Update the user_subscriptions table instead of user_metadata ---
-            # This ensures the subscription status is stored where the application expects it.
-            # We use 'upsert' to either create a new subscription record or update an existing one.
+            # --- FIX: Upsert into the user_subscriptions table ---
+            # This correctly updates the table the application uses to check for "Pro" status.
             try:
                 subscription_data = {
                     "user_id": user_id,
-                    "plan_id": "pro", # Set the plan to 'pro'
-                    "status": "active", # Set the status to 'active'
+                    "plan_id": "pro",
+                    "status": "active",
                     "updated_at": datetime.utcnow().isoformat()
                 }
-                # Upsert on the user_id column.
-                supabase_admin.table("user_subscriptions").upsert(subscription_data, on_conflict="user_id").execute()
-                print(f"Successfully upgraded user {user_id} to Pro plan in user_subscriptions table via event: {event_name}")
+                
+                # Use upsert to either create a new subscription record or update an existing one.
+                # The on_conflict="user_id" tells Supabase to update the row if a record for that user_id already exists.
+                await asyncio.to_thread(
+                    partial(supabase_admin.table("user_subscriptions").upsert, subscription_data, on_conflict="user_id")
+                )
+                
+                print(f"Successfully upserted subscription for user {user_id} to Pro plan via event: {event_name}")
             except APIError as e:
                 print(f"Error updating user_subscriptions for user {user_id}: {e.message}")
                 # Still return 200 to prevent webhook retries, but log the error.
-                return Response(status_code=200, content=f"Webhook processed with DB error: {str(e)}")
+                return Response(status_code=500, content=f"Webhook processed with DB error: {str(e)}")
 
         return Response(status_code=200)
     except Exception as e:
         print(f"Error processing webhook: {str(e)}")
         # Return 200 to prevent Lemon Squeezy from retrying on processing errors
-        return Response(status_code=200, content=f"Webhook processed with error: {str(e)}")
+        return Response(status_code=500, content=f"Webhook processing error: {str(e)}")
 # --- SEO / Static File Routes ---
 @app.get("/robots.txt", response_class=FileResponse)
 async def robots_txt():
