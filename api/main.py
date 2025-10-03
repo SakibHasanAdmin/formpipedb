@@ -1426,7 +1426,7 @@ async def create_checkout_url(checkout_request: CheckoutRequest, auth_details: d
         "Authorization": f"Bearer {LEMON_SQUEEZY_API_KEY}",
     }
 
-    # Pre-fill user data and add user_id to metadata for webhook processing
+    # Pre-fill user data and add user_id to metadata for webhook processing and stuff
     payload = {
         "data": {
             "type": "checkouts",
