@@ -21,9 +21,6 @@
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <a href="/app" class="text-2xl font-bold text-black">FormPipeDB</a>
             <div class="flex items-center gap-4">
-                <a href="/subscription" id="plan-banner-btn" class="hidden text-sm font-semibold px-4 py-2 rounded-full transition-colors whitespace-nowrap">
-                    <!-- Plan name will be inserted here by JS -->
-                </a>
                 <button id="profile-btn" class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded-full font-bold text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <!-- Initials will be inserted here by JS -->
                 </button>
@@ -242,17 +239,6 @@
                         document.getElementById('profile-name').textContent = fullName || 'User';
                         document.getElementById('profile-email').textContent = user.email;
 
-                        // Populate and style the plan banner
-                        const planBannerBtn = document.getElementById('plan-banner-btn');
-                        if (plan.toLowerCase() === 'pro') {
-                            planBannerBtn.textContent = 'You are on the Pro Plan';
-                            planBannerBtn.className = 'text-sm font-semibold px-4 py-2 rounded-full transition-colors bg-indigo-100 text-indigo-700 hover:bg-indigo-200';
-                        } else {
-                            planBannerBtn.textContent = 'Upgrade to Pro';
-                            planBannerBtn.className = 'text-sm font-semibold px-4 py-2 rounded-full transition-colors bg-yellow-100 text-yellow-800 hover:bg-yellow-200';
-                        }
-                        planBannerBtn.classList.remove('hidden');
-                        
                         // Show correct page content based on plan
                         loadingState.classList.add('hidden');
                         if (plan.toLowerCase() === 'pro') {
