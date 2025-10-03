@@ -1421,7 +1421,7 @@ async def create_checkout_url(checkout_request: CheckoutRequest, auth_details: d
         )
         return {"checkout_url": checkout.body['data']['attributes']['url']}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create checkout: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not create checkout session with payment provider: {e}")
 
 
 @app.post("/api/v1/subscription/customer-portal-url")
